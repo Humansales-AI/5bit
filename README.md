@@ -19,8 +19,8 @@ Storage is a **bit‑addressable binary grid** with full ACID guarantees.
 ```
 ✅ Atomicity     — Multi-write transactions via WAL + RECORD
 ✅ Consistency   — Application-enforced (schema-free by design)
-✅ Isolation     — Single-writer + append-only (MVCC for free)
-✅ Durability    — WAL + SHA-256 + fsync + crash recovery
+✅ Isolation     — Single-writer (`flock`), append-only, serialized writes
+✅ Durability    — WAL + fsync + SHA-256 chain, crash recovery verified
 ✅ Point reads   — O(1) at absolute bit offsets
 ✅ Indexes       — Hash (O(1) equality) + B-tree (O(log n) range)
 ✅ Replication   — Master/Replica over HTTP, WAL as oplog
@@ -69,7 +69,7 @@ Schema-free by design. The grid stores tokens — the application enforces rules
 
 ### Isolation
 
-Single-writer (`fcntl.flock`). Append-only = no overwrites = MVCC for free. Old record versions coexist with new ones. Readers see consistent snapshots.
+Single-writer via `fcntl.flock`. All writes serialize through one lock. Threaded sum-N test verifies zero lost updates under contention. Readers see a consistent snapshot because the grid file is immutable between writes.
 
 ### Durability
 
@@ -100,16 +100,20 @@ Every write: WAL → `fsync()` → SHA-256 chain → eventual checkpoint. Crash 
 
 ## Performance
 
-| Operation | GridDB | SQLite | MongoDB | PostgreSQL |
+| Operation | GridDB (in-memory) | GridDB (durable) | SQLite | PostgreSQL |
 |---|---|---|---|---|
-| Point read (by id) | ~120µs | ~200µs | ~500µs | ~200µs |
-| Write (append) | ~140µs | ~300µs | ~800µs | ~300µs |
-| Range scan (1K) | ~2ms | ~3ms | ~5ms | ~2ms |
-| Hash lookup | ~150µs | ~200µs | ~500µs | ~200µs |
-| Schema overhead | **0 bytes** | ~4B/row | ~20B/doc | ~4B/row |
-| Deterministic encoding | ✓ | ✗ | ✗ | ✗ |
-| Content-addressable | SHA-256 | ✗ | ✗ | ✗ |
-| Geometry queries | Native | ✗ (PostGIS) | ✗ (2dsphere) | ✗ (PostGIS) |
+| Point read (O(1) AllocGrid) | ~120µs | ~120µs | ~200µs | ~200µs |
+| Write (single, fsync'd) | — | ~630µs | ~300µs | ~300µs |
+| Write (group commit, batched) | — | ~630µs amortized | ~200µs amortized | ~200µs amortized |
+| Range scan (1K, B-tree) | ~2ms | ~2ms | ~3ms | ~2ms |
+| Hash lookup | ~150µs | ~150µs | ~200µs | ~200µs |
+| Schema overhead | **0 bytes** | **0 bytes** | ~4B/row | ~4B/row |
+| Deterministic encoding | ✓ | ✓ | ✗ | ✗ |
+| Content-addressable | SHA-256 | SHA-256 | ✗ | ✗ |
+| Geometry queries | Native | Native | ✗ | ✗ |
+
+*Durable numbers from group commit correctness suite (~1,580 writes/s, batched fsync).*
+*In-memory numbers from AllocGrid point reads (no fsync on read path).*
 
 ---
 
@@ -138,7 +142,29 @@ Every write: WAL → `fsync()` → SHA-256 chain → eventual checkpoint. Crash 
 - SHA-256 content addressing — verify any segment without schema
 - 32-token vocabulary — 99.9% smaller embedding table for ML
 - Geometry-native queries — no extensions needed
-- Append-only = free MVCC, free audit trail, free replication log
+- Append-only audit trail — every write is a permanent record
+
+---
+
+## Correctness Suite
+
+The strongest evidence GridDB works: `griddb_correctness.py` (Python) and `griddb_correctness.ts` (TypeScript).
+
+| Test | What it proves | Result |
+|---|---|---|
+| Sum-N (single-thread) | Read-modify-write is atomic | ✓ zero lost updates |
+| Sum-N (threaded, `threading.Lock`) | Serialized writes correct under contention | ✓ zero lost updates |
+| Crash recovery (SIGKILL) | Data survives hard kill mid-write | ✓ WAL replays on restart |
+| Group commit (batched fsync) |Throughput scaling via batch durability | ✓ ~1,580 writes/s |
+| WAL checkpoint | Bounded disk growth, data survives snapshot | ✓ |
+| Tombstone | Soft delete + alloc flags correct | ✓ |
+
+```bash
+cd python
+python3 griddb_correctness.py   # Python correctness suite
+cd ../typescript
+npx tsx tests/griddb_correctness.ts  # TypeScript correctness suite
+```
 
 ---
 
@@ -156,10 +182,13 @@ griddb/
 │   ├── griddb_replication.py      # Master/Replica HTTP sync
 │   ├── griddb_transactions.py     # ACID via WAL + RECORD
 │   ├── griddb_changestream.py     # SSE/long-poll from WAL
-│   ├── test_binary_grid_db.py     # 168 tests
+│   ├── griddb_correctness.py      # Correctness suite (sum-N, crash, group commit)
+│   ├── test_binary_grid_db.py     # 168 unit tests
 │   └── requirements.txt
 ├── typescript/
-│   └── src/                       # Full TS port (10 modules)
+│   ├── src/                       # Full TS port (15 modules)
+│   └── tests/
+│       └── griddb_correctness.ts  # TS correctness suite
 └── examples/
     ├── griddb_explorer.py
     └── grid_transformer.py
@@ -169,8 +198,8 @@ griddb/
 
 ```bash
 cd python
-python3 binary_grid_db.py         # Core engine demo
-python3 -m unittest test_binary_grid_db -v  # 168 tests
+python3 griddb_correctness.py     # Correctness suite — prove it works
+python3 -m unittest test_binary_grid_db -v  # 168 unit tests
 
 # Individual demos
 python3 griddb_alloc.py           # O(1) reads at scale
