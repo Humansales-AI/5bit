@@ -1,0 +1,261 @@
+/**
+ * AllocGrid — Two-Level O(1) Storage
+ * ==================================
+ * Level 1: alloc.grid (16 bytes/entry → record_id → offset+length+flags)
+ * Level 2: data.grid (variable-length token blobs)
+ *
+ * read(42):  alloc[42] → (offset, length) → data.seek(offset) → O(1)
+ * write(42): pack tokens → append to data → update alloc[42] → O(1)
+ */
+import fs from 'fs';
+import path from 'path';
+import { Token, ParsedToken, ParsedNumber, ParsedWord, GridRecord } from './types';
+import { Parser } from './parser';
+import { packToBytes, unpackFromBytes } from './serialization';
+
+const ALLOC_ENTRY_SIZE = 16;              // bytes per alloc entry
+const ALLOC_MAGIC = 0x414C4F43;          // "ALOC"
+const DATA_MAGIC = 0x44415441;           // "DATA"
+const FLAG_FREE = 0;
+const FLAG_ALLOCATED = 1;
+const FLAG_TOMBSTONE = 2;
+
+export interface AllocEntry {
+  recordId: number;
+  byteOffset: number;
+  bitLength: number;
+  flags: number;
+}
+
+export interface AllocRecord {
+  recordId: number;
+  tokens: Token[];
+  parsed: ParsedToken[];
+  byteOffset: number;
+  bitLength: number;
+  isTombstone: boolean;
+}
+
+export class AllocGrid {
+  private allocPath: string;
+  private dataPath: string;
+  private dataEnd: number = 12; // header
+  private allocFd: number | null = null;
+  private dataFd: number | null = null;
+
+  constructor(dataDir: string) {
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    this.allocPath = path.join(dataDir, 'alloc.grid');
+    this.dataPath = path.join(dataDir, 'data.grid');
+    this._bootstrap();
+  }
+
+  private _bootstrap(): void {
+    if (fs.existsSync(this.allocPath)) {
+      const hdr = Buffer.alloc(8);
+      const fd = fs.openSync(this.allocPath, 'r');
+      fs.readSync(fd, hdr, 0, 8, 0);
+      fs.closeSync(fd);
+      const magic = hdr.readUInt32BE(0);
+      if (magic !== ALLOC_MAGIC) throw new Error('Invalid alloc file');
+    } else {
+      const fd = fs.openSync(this.allocPath, 'w');
+      const hdr = Buffer.alloc(8);
+      hdr.writeUInt32BE(ALLOC_MAGIC, 0);
+      hdr.writeUInt32BE(1, 4); // version
+      fs.writeSync(fd, hdr);
+      fs.fsyncSync(fd);
+      fs.closeSync(fd);
+    }
+
+    if (fs.existsSync(this.dataPath)) {
+      const hdr = Buffer.alloc(12);
+      const fd = fs.openSync(this.dataPath, 'r');
+      fs.readSync(fd, hdr, 0, 12, 0);
+      fs.closeSync(fd);
+      this.dataEnd = Number(hdr.readBigUInt64BE(4));
+    } else {
+      const fd = fs.openSync(this.dataPath, 'w');
+      const hdr = Buffer.alloc(12);
+      hdr.writeUInt32BE(DATA_MAGIC, 0);
+      hdr.writeBigUInt64BE(BigInt(12), 4);
+      fs.writeSync(fd, hdr);
+      fs.fsyncSync(fd);
+      fs.closeSync(fd);
+    }
+  }
+
+  /** O(1): write tokens at recordId. */
+  write(recordId: number, tokens: Token[]): number {
+    const [packed, padLen] = packToBytes(tokens);
+    const packedBytes = Buffer.from(packed);
+    const bitLength = tokens.length * 5;
+
+    // Append to data region
+    const dataOffset = this.dataEnd;
+    const dataFd = fs.openSync(this.dataPath, 'r+');
+    fs.writeSync(dataFd, packedBytes, 0, packedBytes.length, dataOffset);
+    fs.fsyncSync(dataFd);
+    fs.closeSync(dataFd);
+
+    // Update data end
+    this.dataEnd = dataOffset + packedBytes.length;
+    const dhFd = fs.openSync(this.dataPath, 'r+');
+    const dh = Buffer.alloc(8);
+    dh.writeBigUInt64BE(BigInt(this.dataEnd), 0);
+    fs.writeSync(dhFd, dh, 0, 8, 4);
+    fs.fsyncSync(dhFd);
+    fs.closeSync(dhFd);
+
+    // Update alloc entry
+    this._writeAllocEntry({ recordId, byteOffset: dataOffset, bitLength, flags: FLAG_ALLOCATED });
+
+    return dataOffset;
+  }
+
+  /** O(1): read record at recordId. */
+  read(recordId: number): AllocRecord | null {
+    const entry = this._readAllocEntry(recordId);
+    if (entry.flags === FLAG_FREE || entry.byteOffset === 0) return null;
+
+    const byteLen = Math.ceil(entry.bitLength / 8);
+    const buf = Buffer.alloc(byteLen);
+    const fd = fs.openSync(this.dataPath, 'r');
+    fs.readSync(fd, buf, 0, byteLen, entry.byteOffset);
+    fs.closeSync(fd);
+
+    // Try pad lengths 0-7
+    const expectedTokens = Math.floor(entry.bitLength / 5);
+    let tokens: Token[] | null = null;
+    for (let pad = 0; pad < 8; pad++) {
+      try {
+        const t = unpackFromBytes(new Uint8Array(buf), pad, expectedTokens);
+        if (t.length === expectedTokens) { tokens = t; break; }
+      } catch {}
+    }
+    if (!tokens) return null;
+
+    const parser = new Parser();
+    parser.feedTokens(tokens);
+    parser.finalize();
+
+    return {
+      recordId,
+      tokens,
+      parsed: parser.output,
+      byteOffset: entry.byteOffset,
+      bitLength: entry.bitLength,
+      isTombstone: entry.flags === FLAG_TOMBSTONE,
+    };
+  }
+
+  /** O(1): mark as tombstone. */
+  delete(recordId: number): boolean {
+    const entry = this._readAllocEntry(recordId);
+    if (entry.flags === FLAG_FREE) return false;
+    this._writeAllocEntry({ ...entry, flags: FLAG_TOMBSTONE });
+    return true;
+  }
+
+  /** Number of allocated entries. */
+  get totalEntries(): number {
+    const stat = fs.statSync(this.allocPath);
+    if (stat.size <= 8) return 0;
+    return Math.floor((stat.size - 8) / ALLOC_ENTRY_SIZE);
+  }
+
+  get dataFileSize(): number {
+    return fs.statSync(this.dataPath).size;
+  }
+
+  get allocFileSize(): number {
+    return fs.statSync(this.allocPath).size;
+  }
+
+  // ── Internals ─────────────────────────────────────────────────────────
+
+  private _readAllocEntry(recordId: number): AllocEntry {
+    const off = 8 + recordId * ALLOC_ENTRY_SIZE;
+    const buf = Buffer.alloc(ALLOC_ENTRY_SIZE);
+    const fd = fs.openSync(this.allocPath, 'r');
+    try {
+      const bytes = fs.readSync(fd, buf, 0, ALLOC_ENTRY_SIZE, off);
+      if (bytes < ALLOC_ENTRY_SIZE) return { recordId, byteOffset: 0, bitLength: 0, flags: FLAG_FREE };
+    } catch {
+      return { recordId, byteOffset: 0, bitLength: 0, flags: FLAG_FREE };
+    } finally {
+      fs.closeSync(fd);
+    }
+    const byteOffset = Number(buf.readBigUInt64BE(0));
+    const bitLength = buf.readUInt32BE(8);
+    const flags = buf.readUInt32BE(12);
+    return { recordId, byteOffset, bitLength, flags };
+  }
+
+  private _writeAllocEntry(entry: AllocEntry): void {
+    const off = 8 + entry.recordId * ALLOC_ENTRY_SIZE;
+    const buf = Buffer.alloc(ALLOC_ENTRY_SIZE);
+    buf.writeBigUInt64BE(BigInt(entry.byteOffset), 0);
+    buf.writeUInt32BE(entry.bitLength, 8);
+    buf.writeUInt32BE(entry.flags, 12);
+
+    // Ensure file is large enough
+    const fd = fs.openSync(this.allocPath, 'r+');
+    const needed = off + ALLOC_ENTRY_SIZE;
+    const stat = fs.statSync(this.allocPath);
+    if (stat.size < needed) {
+      fs.writeSync(fd, Buffer.alloc(1), 0, 1, needed - 1);
+    }
+    fs.writeSync(fd, buf, 0, ALLOC_ENTRY_SIZE, off);
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+  }
+
+  close(): void {}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Group Commit — batched fsync for throughput
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface BufferedWrite {
+  recordId: number;
+  tokens: Token[];
+}
+
+export class GroupCommitAllocGrid {
+  private grid: AllocGrid;
+  private buffer: BufferedWrite[] = [];
+  private batchSize: number;
+  private flushCount = 0;
+
+  constructor(dataDir: string, batchSize: number = 50) {
+    this.grid = new AllocGrid(dataDir);
+    this.batchSize = batchSize;
+  }
+
+  /** Buffer a write. Flushes when batch is full. */
+  write(recordId: number, tokens: Token[]): void {
+    this.buffer.push({ recordId, tokens });
+    if (this.buffer.length >= this.batchSize) {
+      this.flush();
+    }
+  }
+
+  /** Force flush all buffered writes. */
+  flush(): void {
+    if (this.buffer.length === 0) return;
+    for (const w of this.buffer) {
+      this.grid.write(w.recordId, w.tokens);
+    }
+    this.flushCount++;
+    this.buffer = [];
+  }
+
+  read(recordId: number) { return this.grid.read(recordId); }
+  delete(recordId: number) { return this.grid.delete(recordId); }
+  get totalEntries() { return this.grid.totalEntries; }
+  get flushes() { return this.flushCount; }
+  get pending() { return this.buffer.length; }
+  close() { this.flush(); }
+}
