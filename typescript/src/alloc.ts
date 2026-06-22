@@ -212,6 +212,79 @@ export class AllocGrid {
   }
 
   close(): void {}
+  get dataEndVal(): number { return this.dataEnd; }
+  set dataEndVal(v: number) { this.dataEnd = v; }
+  get allocFPath(): string { return this.allocPath; }
+  get dataFPath(): string { return this.dataPath; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WAL-backed AllocGrid — crash-safe writes via append-only log
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const WAL_MAGIC = 0x57414C47; // "WALG"
+const WAL_ENTRY_HDR = 16;      // magic(4) + recordId(4) + tokenCount(4) + padLen(4)
+
+export class WALedAllocGrid {
+  grid: AllocGrid;
+  private walPath: string;
+  private walSeq = 0;
+
+  constructor(dataDir: string) {
+    this.grid = new AllocGrid(dataDir);
+    this.walPath = path.join(dataDir, 'wal.grid');
+    if (!fs.existsSync(this.walPath)) {
+      fs.writeFileSync(this.walPath, Buffer.alloc(0));
+    }
+    this._replay();
+  }
+
+  /** Crash-safe write: WAL first, then alloc+data. */
+  write(recordId: number, tokens: Token[]): number {
+    // 1. Append to WAL
+    const [packed, padLen] = packToBytes(tokens);
+    const packedBytes = Buffer.from(packed);
+    const hdr = Buffer.alloc(WAL_ENTRY_HDR);
+    hdr.writeUInt32BE(WAL_MAGIC, 0);
+    hdr.writeInt32BE(recordId, 4);
+    hdr.writeUInt32BE(tokens.length, 8);
+    hdr.writeUInt32BE(padLen, 12);
+    const entry = Buffer.concat([hdr, packedBytes]);
+    const fd = fs.openSync(this.walPath, 'a');
+    fs.writeSync(fd, entry);
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    this.walSeq++;
+
+    // 2. Apply to alloc+data
+    return this.grid.write(recordId, tokens);
+  }
+
+  read(recordId: number) { return this.grid.read(recordId); }
+  delete(recordId: number) { return this.grid.delete(recordId); }
+  get totalEntries() { return this.grid.totalEntries; }
+
+  private _replay(): void {
+    const data = fs.readFileSync(this.walPath);
+    let off = 0;
+    while (off + WAL_ENTRY_HDR <= data.length) {
+      const magic = data.readUInt32BE(off);
+      if (magic !== WAL_MAGIC) break;
+      const recordId = data.readInt32BE(off + 4);
+      const tokenCount = data.readUInt32BE(off + 8);
+      const padLen = data.readUInt32BE(off + 12);
+      off += WAL_ENTRY_HDR;
+      const tokenBytes = Math.ceil((tokenCount * 5) / 8);
+      if (off + tokenBytes > data.length) break;
+      const tokens = unpackFromBytes(new Uint8Array(data.subarray(off, off + tokenBytes)), padLen);
+      off += tokenBytes;
+      // Re-apply
+      try { this.grid.write(recordId, tokens); } catch {}
+      this.walSeq++;
+    }
+  }
+
+  close(): void { this.grid.close(); }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

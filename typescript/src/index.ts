@@ -69,5 +69,5 @@ export {
   findNextSyncPoint,
 } from './geometry';
 
-export { AllocGrid, GroupCommitAllocGrid } from './alloc';
+export { AllocGrid, GroupCommitAllocGrid, WALedAllocGrid } from './alloc';
 export type { AllocEntry, AllocRecord } from './alloc';
