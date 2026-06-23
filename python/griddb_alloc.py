@@ -248,6 +248,20 @@ class AllocGrid:
         finally:
             self._release()
 
+    def write_if(self, record_id: int, tokens: List[Token],
+                 expected_offset: int, expected_bitlen: int) -> bool:
+        """Compare-and-swap: write only if the record hasn't changed since read.
+        Returns True if written, False if someone else wrote first (retry)."""
+        self._acquire()
+        try:
+            current = self._read_alloc_entry(record_id)
+            if current.byte_offset != expected_offset or current.bit_length != expected_bitlen:
+                return False  # CAS failed — someone else wrote
+            self.write(record_id, tokens)
+            return True
+        finally:
+            self._release()
+
     def read(self, record_id: int) -> Optional[AllocRecord]:
         """Read a record via the alloc table. O(1)."""
         # Look up alloc entry

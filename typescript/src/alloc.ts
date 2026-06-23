@@ -113,6 +113,14 @@ export class AllocGrid {
     return dataOffset;
   }
 
+  /** Compare-and-swap: write only if record hasn't changed since read. */
+  writeIf(recordId: number, tokens: Token[], expectedOffset: number, expectedBitLen: number): boolean {
+    const current = this._readAllocEntry(recordId);
+    if (current.byteOffset !== expectedOffset || current.bitLength !== expectedBitLen) return false;
+    this.write(recordId, tokens);
+    return true;
+  }
+
   /** O(1): read record at recordId. */
   read(recordId: number): AllocRecord | null {
     const entry = this._readAllocEntry(recordId);
