@@ -16,15 +16,17 @@ export class Transaction {
   private finalized = false;
   private opCount = 0;
   private static _nextId = 1;
+  private _onDone: (() => void) | null = null;
 
-  constructor(grid: WALedAllocGrid) {
+  constructor(grid: WALedAllocGrid, onDone?: () => void) {
     this.grid = grid;
     this.txnId = Transaction._nextId++;
+    this._onDone = onDone || null;
   }
 
   put(recordId: number, tokens: Token[]): void {
     if (this.finalized) throw new Error('Transaction finalized');
-    this.grid.write(recordId, tokens); // WAL-backed — durable immediately
+    this.grid.write(recordId, tokens);
     this.opCount++;
   }
 
@@ -42,18 +44,15 @@ export class Transaction {
   commit(): void {
     if (this.finalized) throw new Error('Transaction finalized');
     this.finalized = true;
-    // All writes already durable via WAL. TXN_COMMIT is implicit
-    // in the write ordering — all writes in this transaction
-    // are committed together when commit() returns.
     const commitTokens = [...Encoder.encodeInteger(this.txnId), ...Encoder.encodeWord('COMMIT'), Token.RECORD];
     this.grid.write(1_000_000_000 + this.txnId, commitTokens);
+    if (this._onDone) this._onDone();  // Clear parent's active flag
   }
 
   rollback(): void {
     if (this.finalized) throw new Error('Transaction finalized');
     this.finalized = true;
-    // Writes went to WAL but are not applied to alloc+data grid.
-    // On recovery, pending writes without COMMIT are discarded.
+    if (this._onDone) this._onDone();  // Clear parent's active flag
   }
 }
 
@@ -68,18 +67,23 @@ export class TransactionalGrid {
 
   begin(): Transaction {
     if (this.active) throw new Error('Transaction in progress');
-    this.active = new Transaction(this.grid);
+    this.active = new Transaction(this.grid, () => {
+      this.txnCount++;
+      this.active = null;
+    });
     return this.active;
   }
 
+  // commit() and rollback() on the grid are deprecated — use txn.commit() directly.
+  // They remain for backward compatibility.
   commit(): void {
     if (!this.active) throw new Error('No transaction');
-    this.active.commit(); this.txnCount++; this.active = null;
+    this.active.commit();
   }
 
   rollback(): void {
     if (!this.active) throw new Error('No transaction');
-    this.active.rollback(); this.txnCount++; this.active = null;
+    this.active.rollback();
   }
 
   put(rid: number, tokens: Token[]): void {
