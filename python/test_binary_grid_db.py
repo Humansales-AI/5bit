@@ -226,9 +226,9 @@ class TestEncoder(unittest.TestCase):
         ])
 
     def test_encode_word_invalid_char_raises(self):
-        """Characters outside A-Z, space, period should raise ValueError."""
+        """Characters outside all contexts (WORD/SPECIAL/SPECIAL2) should raise ValueError."""
         with self.assertRaises(ValueError):
-            Encoder.encode_word("HI!")
+            Encoder.encode_word("HI~")  # ~ is not in any of the 4 contexts
 
     def test_encode_word_with_period(self):
         tokens = Encoder.encode_word("OK.")

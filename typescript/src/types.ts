@@ -55,6 +55,7 @@ export enum Token {
 export enum ParserState {
   NUM = 0,
   WORD = 1,
+  SPECIAL = 2,   // START-in-WORD triggers this: lowercase + special chars
 }
 
 // ── Parsed token types ──────────────────────────────────────────────────────
@@ -99,7 +100,7 @@ export type ParsedToken =
   | ChecksumResult
   | { type: 'control'; token: Token };
 
-// ── Record ──────────────────────────────────────────────────────────────────
+// ── Parsed Record ──────────────────────────────────────────────────────────
 
 export interface ParsedRecord {
   tokens: ParsedToken[];

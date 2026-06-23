@@ -142,6 +142,23 @@ SPECIAL_CHAR: Dict[Token, str] = {
 
 CHAR_TO_SPECIAL_TOKEN: Dict[str, Token] = {v: k for k, v in SPECIAL_CHAR.items()}
 
+# ── SPECIAL2 context: extended special characters ──────────────────────────
+# Triggered by START-in-SPECIAL.  28 additional slots for punctuation.
+
+SPECIAL2_CHAR: Dict[Token, str] = {
+    Token.D0: '!',  Token.D1: '"',  Token.D2: '#',  Token.D3: '$',
+    Token.D4: '%',  Token.D5: '&',  Token.D6: "'",  Token.D7: '(',
+    Token.D8: ')',  Token.D9: '*',
+    Token.T_PLUS: '+',   Token.T_MINUS: ',',  Token.T_MUL: '/',
+    Token.T_DIV: ':',    Token.T_EQ: ';',     Token.T_LPAREN: '<',
+    Token.T_RPAREN: '=', Token.N1: '>',       Token.N2: '?',
+    Token.N3: '[',       Token.N4: '\\',      Token.N5: ']',
+    Token.N6: '^',       Token.N7: '_',       Token.N8: '`',
+    Token.N9: '{',       Token.T_POW: '|',    Token.T_SCALE: '}',
+}
+
+CHAR_TO_SPECIAL2_TOKEN: Dict[str, Token] = {v: k for k, v in SPECIAL2_CHAR.items()}
+
 # Control tokens
 CONTROL_TOKENS: Set[Token] = {Token.START, Token.END, Token.RECORD, Token.CHECKSUM}
 
@@ -169,7 +186,8 @@ TOKEN_NAME: Dict[Token, str] = {
 class ParserState(IntEnum):
     NUM = 0
     WORD = 1
-    SPECIAL = 2   # START-in-WORD triggers this: lowercase + special chars
+    SPECIAL = 2   # START-in-WORD: lowercase a-z, @, -
+    SPECIAL2 = 3  # START-in-SPECIAL: ! " # $ % & ' ( ) * + , / : ; < = > ? [ \ ] ^ _ ` { | }
 
 
 @dataclass
@@ -312,48 +330,45 @@ class Encoder:
         Example: "Hi@there" → START H START i @ t h e r e END END
         """
         tokens = [Token.START]
-        in_special = False
+        depth = 0  # 0=WORD, 1=SPECIAL, 2=SPECIAL2
+        pop = lambda target: [Token.END] * (depth - target)  # pop to target depth
 
         for ch in text:
-            # 1. Digit 0-9 → encode as NUM token (pop to NUM, emit digit, re-enter WORD)
             if ch.isdigit():
-                if in_special:
-                    tokens.append(Token.END)  # SPECIAL → WORD
-                    in_special = False
+                tokens.extend(pop(0))  # Pop all the way to WORD
+                depth = 0
                 tokens.append(Token.END)       # WORD → NUM
-                tokens.append(DIGIT_TO_TOKEN[int(ch)])  # the digit
+                tokens.append(DIGIT_TO_TOKEN[int(ch)])
                 tokens.append(Token.START)     # NUM → WORD
                 continue
 
-            # 2. WORD context (uppercase A-Z, space, period)
             if ch in CHAR_TO_WORD_TOKEN:
-                if in_special:
-                    tokens.append(Token.END)
-                    in_special = False
+                tokens.extend(pop(0)); depth = 0
                 tokens.append(CHAR_TO_WORD_TOKEN[ch])
                 continue
 
-            # 3. SPECIAL context (lowercase a-z, @, -)
             if ch in CHAR_TO_SPECIAL_TOKEN:
-                if not in_special:
-                    tokens.append(Token.START)
-                    in_special = True
+                if depth > 1: tokens.append(Token.END); depth = 1  # Pop SPECIAL2→SPECIAL
+                elif depth < 1: tokens.append(Token.START); depth = 1
                 tokens.append(CHAR_TO_SPECIAL_TOKEN[ch])
                 continue
 
-            # 4. Fallback: uppercase and try WORD
+            if ch in CHAR_TO_SPECIAL2_TOKEN:
+                if depth < 2:
+                    if depth < 1: tokens.append(Token.START); depth = 1
+                    tokens.append(Token.START); depth = 2
+                tokens.append(CHAR_TO_SPECIAL2_TOKEN[ch])
+                continue
+
             if ch.upper() in CHAR_TO_WORD_TOKEN:
-                if in_special:
-                    tokens.append(Token.END)
-                    in_special = False
+                tokens.extend(pop(0)); depth = 0
                 tokens.append(CHAR_TO_WORD_TOKEN[ch.upper()])
                 continue
 
             raise ValueError(f"Character '{ch}' cannot be encoded in any context")
 
-        if in_special:
-            tokens.append(Token.END)  # Pop SPECIAL → WORD
-        tokens.append(Token.END)      # Pop WORD → NUM
+        tokens.extend(pop(0))  # Pop all contexts
+        tokens.append(Token.END)  # WORD → NUM
         return tokens
 
     @staticmethod
@@ -481,6 +496,17 @@ class Parser:
         self.output.append(parsed)
         self.accumulator = []
 
+    def _finalize_special2(self):
+        """Convert accumulated SPECIAL2 tokens into a ParsedWord and emit it."""
+        chars = []
+        for t in self.accumulator:
+            tok = Token(t)
+            chars.append(SPECIAL2_CHAR[tok])
+        text = ''.join(chars)
+        parsed = ParsedWord(characters=chars, text=text)
+        self.output.append(parsed)
+        self.accumulator = []
+
     def _emit_record(self):
         """Emit a RECORD boundary, grouping tokens since the last RECORD."""
         # Find tokens emitted since last record start
@@ -585,14 +611,36 @@ class Parser:
                 emitted = Token.CHECKSUM
 
             elif token == Token.START:
-                # Nested START in SPECIAL — ignore (already in deepest context)
-                pass
+                # START-in-SPECIAL: enter SPECIAL2 (extended punctuation)
+                self._finalize_special()
+                self.state = ParserState.SPECIAL2
 
             elif token in SPECIAL_CHAR:
                 self.accumulator.append(int(token))
 
             else:
                 raise ValueError(f"Unexpected token {token.name} in SPECIAL state")
+
+        elif self.state == ParserState.SPECIAL2:
+            if token == Token.END:
+                self._finalize_special2()
+                self.state = ParserState.SPECIAL
+                emitted = Token.END
+            elif token == Token.RECORD:
+                self._finalize_special2()
+                self.state = ParserState.NUM
+                self._emit_record()
+                emitted = Token.RECORD
+            elif token == Token.CHECKSUM:
+                self._finalize_special2()
+                self.state = ParserState.NUM
+                emitted = Token.CHECKSUM
+            elif token == Token.START:
+                pass
+            elif token in SPECIAL2_CHAR:
+                self.accumulator.append(int(token))
+            else:
+                raise ValueError(f"Unexpected token {token.name} in SPECIAL2 state")
 
         return emitted
 
@@ -613,6 +661,8 @@ class Parser:
             self._finalize_word()
         elif self.state == ParserState.SPECIAL:
             self._finalize_special()
+        elif self.state == ParserState.SPECIAL2:
+            self._finalize_special2()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

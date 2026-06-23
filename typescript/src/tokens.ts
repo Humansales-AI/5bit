@@ -70,6 +70,26 @@ for (const [tok, ch] of WORD_CHAR) {
   CHAR_TO_WORD_TOKEN.set(ch, tok);
 }
 
+// ── SPECIAL context: lowercase letters & special characters ──────────────
+// Triggered by START-in-WORD. Uses same 28 slots (00000-11011) but remapped.
+// Controls (11100-11111) retain their meaning across all contexts.
+
+export const SPECIAL_CHAR: Map<Token, string> = new Map([
+  [Token.D0, 'a'], [Token.D1, 'b'], [Token.D2, 'c'], [Token.D3, 'd'], [Token.D4, 'e'],
+  [Token.D5, 'f'], [Token.D6, 'g'], [Token.D7, 'h'], [Token.D8, 'i'], [Token.D9, 'j'],
+  [Token.T_PLUS, 'k'], [Token.T_MINUS, 'l'], [Token.T_MUL, 'm'], [Token.T_DIV, 'n'],
+  [Token.T_EQ, 'o'], [Token.T_LPAREN, 'p'], [Token.T_RPAREN, 'q'],
+  [Token.N1, 'r'], [Token.N2, 's'], [Token.N3, 't'], [Token.N4, 'u'],
+  [Token.N5, 'v'], [Token.N6, 'w'], [Token.N7, 'x'], [Token.N8, 'y'], [Token.N9, 'z'],
+  [Token.T_POW, '@'],      // was SPACE in WORD
+  [Token.T_SCALE, '-'],     // was . in WORD
+]);
+
+export const CHAR_TO_SPECIAL_TOKEN: Map<string, Token> = new Map();
+for (const [tok, ch] of SPECIAL_CHAR) {
+  CHAR_TO_SPECIAL_TOKEN.set(ch, tok);
+}
+
 // ── Control tokens ─────────────────────────────────────────────────────────
 
 export const CONTROL_TOKENS: Set<Token> = new Set([

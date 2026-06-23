@@ -6,7 +6,7 @@
  */
 
 import { Token } from './types';
-import { DIGIT_TO_TOKEN, SYMBOL_TO_OPERATOR, CHAR_TO_WORD_TOKEN, CHAR_TO_SPECIAL_TOKEN } from './tokens';
+import { DIGIT_TO_TOKEN, SYMBOL_TO_OPERATOR, CHAR_TO_WORD_TOKEN, CHAR_TO_SPECIAL_TOKEN, CHAR_TO_SPECIAL2_TOKEN } from './tokens';
 
 export class Encoder {
   /**
@@ -19,12 +19,11 @@ export class Encoder {
    * For negative numbers, each digit carries its own sign.
    * Zero digits in negative numbers use D0 (no -0 concept).
    */
-  static encodeInteger(value: number | bigint): Token[] {
-    if (value === 0 || value === 0n) return [Token.D0, Token.END];
+  static encodeInteger(value: number): Token[] {
+    if (value === 0) return [Token.D0, Token.END];
 
     const sign = value >= 0 ? 1 : -1;
-    const absVal = typeof value === 'bigint' ? (value < 0n ? -value : value) : Math.abs(value);
-    const digitsStr = absVal.toString();
+    const digitsStr = Math.abs(value).toString();
 
     const tokens: Token[] = [];
     for (const ch of digitsStr) {
@@ -56,49 +55,38 @@ export class Encoder {
   }
 
   /**
-   * Encode a word as START + letter tokens + END.
+   * Encode a word as START + letters + END.
+   * Handles mixed WORD/SPECIAL contexts via START-in-WORD switching.
    *
    * Example: "HI" → [START, H, I, END] = [11111, 00111, 01000, 11110]
+   * Example: "hi" → [START, START, h, i, END, END]
+   * Example: "hi@there" → START START h i @ t h e r e END END
    */
   static encodeWord(text: string): Token[] {
     const tokens: Token[] = [Token.START];
-    let inSpecial = false;
+    let depth = 0; // 0=WORD, 1=SPECIAL, 2=SPECIAL2
+    const pop = (target: number) => { for (let i = depth; i > target; i--) tokens.push(Token.END); depth = target; };
 
     for (const ch of text) {
-      // 1. Digit → encode via context switch to NUM
       if (ch >= '0' && ch <= '9') {
-        if (inSpecial) { tokens.push(Token.END); inSpecial = false; }
-        tokens.push(Token.END);  // WORD → NUM
-        tokens.push(DIGIT_TO_TOKEN.get(parseInt(ch, 10))!);
-        tokens.push(Token.START);  // NUM → WORD
+        pop(0); tokens.push(Token.END); tokens.push(DIGIT_TO_TOKEN.get(parseInt(ch, 10))!); tokens.push(Token.START);
         continue;
       }
-      // 2. WORD context (uppercase A-Z, space, period)
       const wordTok = CHAR_TO_WORD_TOKEN.get(ch);
-      if (wordTok !== undefined) {
-        if (inSpecial) { tokens.push(Token.END); inSpecial = false; }
-        tokens.push(wordTok);
-        continue;
-      }
-      // 3. SPECIAL context (lowercase a-z, @, -)
-      const specialTok = CHAR_TO_SPECIAL_TOKEN.get(ch);
-      if (specialTok !== undefined) {
-        if (!inSpecial) { tokens.push(Token.START); inSpecial = true; }
-        tokens.push(specialTok);
-        continue;
-      }
-      // 4. Fallback: uppercase the char and try WORD
-      const upperTok = CHAR_TO_WORD_TOKEN.get(ch.toUpperCase());
-      if (upperTok !== undefined) {
-        if (inSpecial) { tokens.push(Token.END); inSpecial = false; }
-        tokens.push(upperTok);
-        continue;
-      }
-      throw new Error(`Character '${ch}' cannot be encoded`);
-    }
+      if (wordTok !== undefined) { pop(0); tokens.push(wordTok); continue; }
 
-    if (inSpecial) tokens.push(Token.END);  // Pop SPECIAL → WORD
-    tokens.push(Token.END);  // Pop WORD → NUM
+      const specialTok = CHAR_TO_SPECIAL_TOKEN.get(ch);
+      if (specialTok !== undefined) { if (depth > 1) pop(1); else if (depth < 1) { tokens.push(Token.START); depth = 1; } tokens.push(specialTok); continue; }
+
+      const special2Tok = CHAR_TO_SPECIAL2_TOKEN.get(ch);
+      if (special2Tok !== undefined) { if (depth < 2) { if (depth < 1) { tokens.push(Token.START); depth = 1; } tokens.push(Token.START); depth = 2; } tokens.push(special2Tok); continue; }
+
+      const upperTok = CHAR_TO_WORD_TOKEN.get(ch.toUpperCase());
+      if (upperTok !== undefined) { pop(0); tokens.push(upperTok); continue; }
+
+      throw new Error(`Character '${ch}' cannot be encoded in any context`);
+    }
+    pop(0); tokens.push(Token.END);
     return tokens;
   }
 
