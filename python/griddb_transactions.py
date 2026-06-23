@@ -156,17 +156,20 @@ class Transaction:
         Transaction._next_id += 1
         self._finalized = False
         self._op_count = 0
-        self._on_done = on_done  # callback to clear parent's active flag
+        self._on_done = on_done
+        self._pending: List[Tuple[int, List[Token]]] = []  # Track writes in-memory
 
     def put(self, record_id: int, tokens: List[Token]):
         self._check_open()
         self.wal.append(self.txn_id, record_id, tokens, TxnWAL.FLAG_PENDING)
+        self._pending.append((record_id, tokens))
         self._op_count += 1
 
     def delete(self, record_id: int):
         self._check_open()
         tombstone = [Token.D0, Token.END, Token.RECORD]
         self.wal.append(self.txn_id, record_id, tombstone, TxnWAL.FLAG_PENDING)
+        self._pending.append((record_id, tombstone))
         self._op_count += 1
 
     def swap(self, from_rid: int, to_rid: int,
@@ -174,6 +177,8 @@ class Transaction:
         self._check_open()
         self.wal.append(self.txn_id, from_rid, from_tokens, TxnWAL.FLAG_PENDING)
         self.wal.append(self.txn_id, to_rid, to_tokens, TxnWAL.FLAG_PENDING)
+        self._pending.append((from_rid, from_tokens))
+        self._pending.append((to_rid, to_tokens))
         self._op_count += 2
 
     def commit(self):
@@ -182,26 +187,22 @@ class Transaction:
         self.wal.commit_txn(self.txn_id)
         self._finalized = True
         self._apply()
-        if self._on_done:
-            self._on_done()  # Clear parent's active flag
+        if self._on_done: self._on_done()
 
     def rollback(self):
         """Mark transaction as rolled back — writes never applied to grid."""
         self._check_open()
         self._finalized = True
-        if self._on_done:
-            self._on_done()  # Clear parent's active flag
+        self._pending = []  # Discard tracked writes
+        if self._on_done: self._on_done()
 
     def _apply(self):
-        """Apply all committed writes from this transaction to the grid."""
-        for entry in self.wal.read_all():
-            if entry['txn_id'] == self.txn_id and entry['flags'] == TxnWAL.FLAG_PENDING:
-                rid = entry['record_id']
-                tokens = entry['tokens']
-                if len(tokens) == 3 and tokens[0] == Token.D0 and tokens[-1] == Token.RECORD:
-                    self.grid.delete(rid)
-                elif rid >= 0:
-                    self.grid.write(rid, tokens)
+        """Apply tracked writes to the grid — O(1) per write, no WAL rescan."""
+        for rid, tokens in self._pending:
+            if len(tokens) == 3 and tokens[0] == Token.D0 and tokens[-1] == Token.RECORD:
+                self.grid.delete(rid)
+            elif rid >= 0:
+                self.grid.write(rid, tokens)
 
     def _check_open(self):
         if self._finalized:

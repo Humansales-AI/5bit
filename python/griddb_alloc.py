@@ -214,7 +214,11 @@ class AllocGrid:
             packed_bytes = bytes(packed)
             bit_length = len(tokens) * 5
 
-            # Append to data region
+            # Append to data region — re-read _data_end from file to avoid stale cache
+            with open(self.data_path, 'rb') as f:
+                hdr = f.read(DATA_HEADER_SIZE)
+                if len(hdr) == DATA_HEADER_SIZE:
+                    self._data_end = struct.unpack(DATA_HEADER_FMT, hdr)[0]
             data_offset = self._data_end
             with open(self.data_path, 'r+b') as f:
                 f.seek(data_offset)
