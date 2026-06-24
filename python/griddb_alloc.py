@@ -323,7 +323,7 @@ class AllocGrid:
             if rec and rec.flags != FLAG_TOMBSTONE:
                 new_grid.write(rid, rec.tokens)
             elif rec and rec.flags == FLAG_TOMBSTONE:
-                freed += rec.byte_length
+                freed += (rec.bit_length + 7) // 8
         self.close()
         for fname in ('alloc.grid', 'data.grid'):
             src = os.path.join(tmp_dir, fname)
