@@ -192,7 +192,7 @@ SQLite has 50 years of optimization, a page cache, B-tree, and WAL mode. 5bit is
 | Operation | 5bit | SQLite (WAL) |
 |---|---|---|
 | Point read (O(1) alloc) | ~83µs uncached / ~5µs cached (LRU, working set in RAM) / ~95µs thrash | ~6µs (page cache) |
-| Write (group commit, fsync'd) | ~630µs amortized (~1,580/s) | ~50µs amortized (~20,000/s) |
+| Write (group commit, batched fsync) | ~48µs amortized (~20,800/s) | ~50µs amortized (~20,000/s) |
 | Compaction | Manual, O(n) scan | Auto, background |
 | Schema overhead | **0 bytes** | ~4 bytes/row |
 | Deterministic encoding | ✓ (SHA-256 content-addressed) | ✗ |
@@ -244,7 +244,7 @@ The strongest evidence 5bit works: `5bit_correctness.py` (Python) and `5bit_corr
 | Sum-N (single-thread) | Read-modify-write is atomic | ✓ zero lost updates |
 | Sum-N (threaded, `threading.Lock`) | Serialized writes correct under contention | ✓ zero lost updates |
 | Crash recovery (SIGKILL) | Data survives hard kill mid-write | ✓ WAL replays on restart |
-| Group commit (batched fsync) |Throughput scaling via batch durability | ✓ ~1,580 writes/s |
+| Group commit (batched fsync) |Throughput scaling via batch durability | ✓ ~20,800 writes/s |
 | WAL checkpoint | Bounded disk growth, data survives snapshot | ✓ |
 | Tombstone | Soft delete + alloc flags correct | ✓ |
 
