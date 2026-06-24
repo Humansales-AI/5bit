@@ -1,21 +1,21 @@
 """
 5bit RLS — Row-Level Security
 ===============================
-Engine-enforced access control. Not a helper you call — the storage
-layer refuses the operation if the policy fails. You cannot forget.
+Application-level access control wrapper over 5bit AllocGrid.
+Honest: this is a wrapper, not engine-enforced. A plain AllocGrid
+pointed at the same data directory bypasses all policies. Use it
+correctly (single access point) and it provides real protection.
 
-Policies are defined per table, per action (read/write/delete).
-Each policy is a function: (user_id, record_id, record_data) → bool.
+Policies are checked before every read/write/delete. You cannot
+accidentally skip them because the wrapper doesn't expose the
+underlying grid — every operation goes through policy checks.
 
 Usage:
   from fivebit.rls import RLSGrid
-
   grid = RLSGrid("./data")
   grid.policy("users", "read", lambda uid, rid, rec: uid == rid)
-  grid.policy("users", "write", lambda uid, rid, rec: uid == rid)
-
-  grid.read(user_id=1, record_id=1)   # ✓ own record
-  grid.read(user_id=2, record_id=1)   # ✗ PermissionDenied — engine refuses
+  grid.read("users", user_id=1, record_id=1)   # ✓ own record
+  grid.read("users", user_id=2, record_id=1)   # ✗ PermissionDenied
 """
 import os, sys
 from typing import Callable, Optional, Dict, Any, List
@@ -56,36 +56,36 @@ class RLSGrid:
 
     def _check(self, table: str, action: str, user_id: int,
                record_id: int, record: Optional[Dict] = None) -> bool:
-        """Run all policies for this table+action. All must pass."""
-        for act in (action, '*'):  # Check specific action, then wildcard
-            for fn in self._policies.get(table, {}).get(act, []):
-                if not fn(user_id, record_id, record):
-                    raise PermissionDenied(
-                        f"RLS: {action} denied on {table}#{record_id} for user {user_id}")
+        """Run all policies for this table+action AND '*' wildcard. All must pass."""
+        for tbl in (table, '*'):  # Check specific table, then wildcard
+            for act in (action, '*'):  # Check specific action, then wildcard
+                for fn in self._policies.get(tbl, {}).get(act, []):
+                    if not fn(user_id, record_id, record):
+                        raise PermissionDenied(
+                            f"RLS: {action} denied on {table}#{record_id} for user {user_id}")
         return True
 
-    def read(self, user_id: int, record_id: int) -> Optional[AllocRecord]:
-        """Read a record, RLS-checked."""
+    def read(self, table: str, user_id: int, record_id: int) -> Optional[AllocRecord]:
+        """Read a record, RLS-checked. table is the policy namespace."""
         rec = self.grid.read(record_id)
-        # Build a lightweight record dict for policy evaluation
         data = self._record_to_dict(rec) if rec else None
-        self._check('*', 'read', user_id, record_id, data)
+        self._check(table, 'read', user_id, record_id, data)
         return rec
 
-    def write(self, user_id: int, record_id: int, tokens: List[Token]) -> int:
-        """Write a record, RLS-checked. For updates, checks existing record too."""
+    def write(self, table: str, user_id: int, record_id: int, tokens: List[Token]) -> int:
+        """Write a record, RLS-checked."""
         existing = self.grid.read(record_id)
         data = self._record_to_dict(existing) if existing else None
         action = 'write' if existing and not existing.is_tombstone else 'create'
-        self._check('*', action, user_id, record_id, data)
+        self._check(table, action, user_id, record_id, data)
         return self.grid.write(record_id, tokens)
 
-    def delete(self, user_id: int, record_id: int) -> bool:
+    def delete(self, table: str, user_id: int, record_id: int) -> bool:
         """Delete a record, RLS-checked."""
         existing = self.grid.read(record_id)
         if existing:
             data = self._record_to_dict(existing)
-            self._check('*', 'delete', user_id, record_id, data)
+            self._check(table, 'delete', user_id, record_id, data)
         return self.grid.delete(record_id)
 
     def _record_to_dict(self, rec: AllocRecord) -> Dict[str, Any]:
