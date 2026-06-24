@@ -1,4 +1,4 @@
-# GridDB — The Binary Grid Database
+# 5bit — The Binary Grid Database
 
 **A Unified 5‑Bit Integer Fabric with Full ACID Support**
 
@@ -174,7 +174,7 @@ Every write: WAL → `fsync()` → SHA-256 chain → eventual checkpoint. Crash 
 
 ## Performance
 
-| Operation | GridDB (in-memory) | GridDB (durable) | SQLite | PostgreSQL |
+| Operation | 5bit (in-memory) | 5bit (durable) | SQLite | PostgreSQL |
 |---|---|---|---|---|
 | Point read (O(1) AllocGrid) | ~120µs | ~120µs | ~200µs | ~200µs |
 | Write (single, fsync'd) | — | ~630µs | ~300µs | ~300µs |
@@ -193,7 +193,7 @@ Every write: WAL → `fsync()` → SHA-256 chain → eventual checkpoint. Crash 
 
 ## Gap Assessment
 
-| Feature | GridDB | MongoDB | PostgreSQL |
+| Feature | 5bit | MongoDB | PostgreSQL |
 |---|---|---|---|
 | O(1) point reads | ✓ | ✓ | ✓ |
 | Secondary indexes | ✓ | ✓ | ✓ |
@@ -206,12 +206,12 @@ Every write: WAL → `fsync()` → SHA-256 chain → eventual checkpoint. Crash 
 | Content addressing | ✓ | ✗ | ✗ |
 | Zero schema overhead | ✓ | ~ | ✗ |
 
-**What MongoDB/PostgreSQL have that GridDB doesn't:**
+**What MongoDB/PostgreSQL have that 5bit doesn't:**
 - Aggregation pipeline (deferred — not needed yet)
 - Decades of production hardening (tooling, drivers, cloud)
 - Full-text search, geospatial indexes, JSONB, window functions
 
-**What GridDB has that they don't:**
+**What 5bit has that they don't:**
 - Bit-level determinism — same input = same bytes everywhere
 - SHA-256 content addressing — verify any segment without schema
 - 32-token vocabulary — 99.9% smaller embedding table (1,024 floats vs 131M for GPT-2). Tradeoff: longer sequences (attention is O(seq²)). A hash is ~64 tokens, a word is ~1 token/char. Tiny vocabulary, explicit sequences — honest about the cost.
@@ -222,7 +222,7 @@ Every write: WAL → `fsync()` → SHA-256 chain → eventual checkpoint. Crash 
 
 ## Correctness Suite
 
-The strongest evidence GridDB works: `griddb_correctness.py` (Python) and `griddb_correctness.ts` (TypeScript).
+The strongest evidence 5bit works: `5bit_correctness.py` (Python) and `5bit_correctness.ts` (TypeScript).
 
 | Test | What it proves | Result |
 |---|---|---|
@@ -235,9 +235,9 @@ The strongest evidence GridDB works: `griddb_correctness.py` (Python) and `gridd
 
 ```bash
 cd python
-python3 griddb_correctness.py   # Python correctness suite
+python3 5bit_correctness.py   # Python correctness suite
 cd ../typescript
-npx tsx tests/griddb_correctness.ts  # TypeScript correctness suite
+npx tsx tests/5bit_correctness.ts  # TypeScript correctness suite
 ```
 
 ---
@@ -245,26 +245,26 @@ npx tsx tests/griddb_correctness.ts  # TypeScript correctness suite
 ## Project Structure
 
 ```
-griddb/
+5bit/
 ├── README.md
 ├── python/
 │   ├── binary_grid_db.py          # Core: tokens, encoder, parser, 3 contexts
-│   ├── griddb_wal.py              # WAL + SHA-256 chaining
-│   ├── griddb_positioned.py       # O(1) positioned grid
-│   ├── griddb_alloc.py            # AllocGrid (billions of records)
-│   ├── griddb_index.py            # HashIndex + BTreeIndex
-│   ├── griddb_replication.py      # Master/Replica HTTP sync
-│   ├── griddb_transactions.py     # ACID via WAL + RECORD
-│   ├── griddb_changestream.py     # SSE/long-poll from WAL
-│   ├── griddb_correctness.py      # Correctness suite (sum-N, crash, group commit)
+│   ├── 5bit_wal.py              # WAL + SHA-256 chaining
+│   ├── 5bit_positioned.py       # O(1) positioned grid
+│   ├── 5bit_alloc.py            # AllocGrid (billions of records)
+│   ├── 5bit_index.py            # HashIndex + BTreeIndex
+│   ├── 5bit_replication.py      # Master/Replica HTTP sync
+│   ├── 5bit_transactions.py     # ACID via WAL + RECORD
+│   ├── 5bit_changestream.py     # SSE/long-poll from WAL
+│   ├── 5bit_correctness.py      # Correctness suite (sum-N, crash, group commit)
 │   ├── test_binary_grid_db.py     # 168 unit tests
 │   └── requirements.txt
 ├── typescript/
 │   ├── src/                       # Full TS port (15 modules)
 │   └── tests/
-│       └── griddb_correctness.ts  # TS correctness suite
+│       └── 5bit_correctness.ts  # TS correctness suite
 └── examples/
-    ├── griddb_explorer.py
+    ├── 5bit_explorer.py
     └── grid_transformer.py
 ```
 
@@ -272,15 +272,15 @@ griddb/
 
 ```bash
 cd python
-python3 griddb_correctness.py     # Correctness suite — prove it works
+python3 5bit_correctness.py     # Correctness suite — prove it works
 python3 -m unittest test_binary_grid_db -v  # 168 unit tests
 
 # Individual demos
-python3 griddb_alloc.py           # O(1) reads at scale
-python3 griddb_index.py           # Hash + B-tree indexes
-python3 griddb_replication.py     # Master/replica sync
-python3 griddb_transactions.py    # ACID transactions
-python3 griddb_changestream.py    # Change streams
+python3 5bit_alloc.py           # O(1) reads at scale
+python3 5bit_index.py           # Hash + B-tree indexes
+python3 5bit_replication.py     # Master/replica sync
+python3 5bit_transactions.py    # ACID transactions
+python3 5bit_changestream.py    # Change streams
 ```
 
 ---

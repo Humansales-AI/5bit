@@ -1,5 +1,5 @@
 {
-  "name": "griddb",
+  "name": "5bit",
   "version": "2.0.0",
   "description": "Binary Grid Database — A Unified 5-Bit Integer Fabric. Deterministic, language-agnostic data storage with geometric queries.",
   "main": "dist/index.js",
