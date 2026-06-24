@@ -179,12 +179,17 @@ export class AllocGrid {
       else if (rec?.isTombstone) freed += Math.ceil(rec.bitLength / 8);
     }
     this.close();
+    // Atomic: rename temp files, then commit marker
     for (const fn of ['alloc.grid', 'data.grid']) {
       const src = path.join(tmpDir, fn);
       const dst = path.join(path.dirname(this.allocPath), fn);
       if (fs.existsSync(src)) fs.renameSync(src, dst);
     }
-    fs.rmdirSync(tmpDir, { recursive: true });
+    // Commit marker: if this exists, compaction completed
+    const marker = path.join(path.dirname(this.allocPath), 'compact.done');
+    fs.writeFileSync(marker, '1'); fs.fsyncSync(fs.openSync(marker, 'r+'));
+    fs.unlinkSync(marker);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
     this._bootstrap();
     const newSize = fs.statSync(this.dataPath).size + fs.statSync(this.allocPath).size;
     return oldSize - newSize;

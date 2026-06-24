@@ -325,12 +325,15 @@ class AllocGrid:
             elif rec and rec.flags == FLAG_TOMBSTONE:
                 freed += rec.byte_length
         self.close()
-        # Replace old files
         for fname in ('alloc.grid', 'data.grid'):
             src = os.path.join(tmp_dir, fname)
             dst = os.path.join(self.data_dir, fname)
             if os.path.exists(src):
                 shutil.move(src, dst)
+        # Commit marker ensures both files landed before cleanup
+        marker = os.path.join(self.data_dir, 'compact.done')
+        with open(marker, 'w') as m: m.write('1'); os.fsync(m.fileno())
+        os.unlink(marker)
         shutil.rmtree(tmp_dir, ignore_errors=True)
         # Re-open
         self._data_fd = None; self._alloc_fd = None
