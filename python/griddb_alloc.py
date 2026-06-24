@@ -21,6 +21,7 @@ import struct
 import fcntl
 import time
 import hashlib
+from collections import OrderedDict
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
 
@@ -97,7 +98,7 @@ class AllocGrid:
       Entry points to (offset, length) within this file.
     """
 
-    def __init__(self, data_dir: str = "./data"):
+    def __init__(self, data_dir: str = "./data", cache_size: int = 0):
         self.data_dir = data_dir
         os.makedirs(data_dir, exist_ok=True)
 
@@ -106,9 +107,14 @@ class AllocGrid:
 
         self._lock_fd = None
         self._data_end = DATA_HEADER_SIZE
-        # Persistent file descriptors — avoids open/close on every op
         self._alloc_fd: Optional[int] = None
         self._data_fd: Optional[int] = None
+
+        # Optional LRU page cache
+        self._cache: OrderedDict = OrderedDict()
+        self._cache_size = cache_size
+        self._cache_hits = 0
+        self._cache_misses = 0
 
         self._bootstrap()
 
@@ -247,6 +253,9 @@ class AllocGrid:
             )
             self._write_alloc_entry(entry)
 
+            # Invalidate cache
+            if self._cache_size > 0:
+                self._cache.pop(record_id, None)
             return data_offset
         finally:
             self._release()
@@ -266,7 +275,13 @@ class AllocGrid:
             self._release()
 
     def read(self, record_id: int) -> Optional[AllocRecord]:
-        """Read a record via the alloc table. O(1)."""
+        """Read a record via the alloc table. O(1). Uses LRU cache if enabled."""
+        # Check cache
+        if self._cache_size > 0 and record_id in self._cache:
+            self._cache.move_to_end(record_id)
+            self._cache_hits += 1
+            return self._cache[record_id]
+
         entry = self._read_alloc_entry(record_id)
         if entry.is_free:
             return None
@@ -292,7 +307,7 @@ class AllocGrid:
         parser.finalize()
         parser.reassemble()
 
-        return AllocRecord(
+        rec = AllocRecord(
             record_id=record_id,
             tokens=tokens,
             parsed=parser.output,
@@ -300,6 +315,13 @@ class AllocGrid:
             bit_length=entry.bit_length,
             flags=entry.flags,
         )
+        # Store in cache
+        if self._cache_size > 0:
+            if len(self._cache) >= self._cache_size:
+                self._cache.popitem(last=False)
+            self._cache[record_id] = rec
+            self._cache_misses += 1
+        return rec
 
     def delete(self, record_id: int) -> bool:
         """Mark record as tombstone in alloc table. O(1)."""
@@ -309,6 +331,8 @@ class AllocGrid:
 
         entry.flags = FLAG_TOMBSTONE
         self._write_alloc_entry(entry)
+        if self._cache_size > 0:
+            self._cache.pop(record_id, None)
         return True
 
     def compact(self) -> int:
