@@ -167,6 +167,29 @@ export class AllocGrid {
     return true;
   }
 
+  /** Compact: remove tombstones, rewrite grid. Returns freed bytes. */
+  compact(): number {
+    const oldSize = fs.statSync(this.dataPath).size + fs.statSync(this.allocPath).size;
+    const tmpDir = fs.mkdtempSync(path.join(this.dataPath, '..', 'compact-'));
+    const tmp = new AllocGrid(tmpDir);
+    let freed = 0;
+    for (let rid = 0; rid < this.totalEntries; rid++) {
+      const rec = this.read(rid);
+      if (rec && !rec.isTombstone) tmp.write(rid, rec.tokens);
+      else if (rec?.isTombstone) freed += Math.ceil(rec.bitLength / 8);
+    }
+    this.close();
+    for (const fn of ['alloc.grid', 'data.grid']) {
+      const src = path.join(tmpDir, fn);
+      const dst = path.join(path.dirname(this.allocPath), fn);
+      if (fs.existsSync(src)) fs.renameSync(src, dst);
+    }
+    fs.rmdirSync(tmpDir, { recursive: true });
+    this._bootstrap();
+    const newSize = fs.statSync(this.dataPath).size + fs.statSync(this.allocPath).size;
+    return oldSize - newSize;
+  }
+
   /** Number of allocated entries. */
   get totalEntries(): number {
     const stat = fs.statSync(this.allocPath);
@@ -299,6 +322,15 @@ export class WALedAllocGrid {
   delete(recordId: number) { return this.grid.delete(recordId); }
   get totalEntries() { return this.grid.totalEntries; }
   get fileSize() { return this.grid.allocFileSize + this.grid.dataFileSize; }
+
+  /** Checkpoint: flush grid, truncate WAL. */
+  checkpoint(): void {
+    const bak = this.walPath + '.bak';
+    fs.renameSync(this.walPath, bak);
+    fs.writeFileSync(this.walPath, '');
+    fs.unlinkSync(bak);
+    this.walSeq = 0;
+  }
 
   private _replay(): void {
     const data = fs.readFileSync(this.walPath);

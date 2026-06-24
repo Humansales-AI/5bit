@@ -105,7 +105,10 @@ class AllocGrid:
         self.data_path = os.path.join(data_dir, "data.grid")
 
         self._lock_fd = None
-        self._data_end = DATA_HEADER_SIZE  # next write position in data region
+        self._data_end = DATA_HEADER_SIZE
+        # Persistent file descriptors — avoids open/close on every op
+        self._alloc_fd: Optional[int] = None
+        self._data_fd: Optional[int] = None
 
         self._bootstrap()
 
@@ -264,16 +267,15 @@ class AllocGrid:
 
     def read(self, record_id: int) -> Optional[AllocRecord]:
         """Read a record via the alloc table. O(1)."""
-        # Look up alloc entry
         entry = self._read_alloc_entry(record_id)
         if entry.is_free:
             return None
 
-        # Read from data region
         byte_len = entry.byte_length
-        with open(self.data_path, 'rb') as f:
-            f.seek(entry.byte_offset)
-            raw = f.read(byte_len)
+        if self._data_fd is None:
+            self._data_fd = os.open(self.data_path, os.O_RDWR)
+        os.lseek(self._data_fd, entry.byte_offset, os.SEEK_SET)
+        raw = os.read(self._data_fd, byte_len)
 
         if not raw or len(raw) == 0:
             return None
@@ -308,6 +310,33 @@ class AllocGrid:
         entry.flags = FLAG_TOMBSTONE
         self._write_alloc_entry(entry)
         return True
+
+    def compact(self) -> int:
+        """Remove tombstones, rewrite grid. Returns bytes freed."""
+        import tempfile, shutil
+        old_size = os.path.getsize(self.data_path) + os.path.getsize(self.alloc_path)
+        tmp_dir = tempfile.mkdtemp()
+        new_grid = AllocGrid(data_dir=tmp_dir)
+        freed = 0
+        for rid in range(self.total_entries):
+            rec = self.read(rid)
+            if rec and rec.flags != FLAG_TOMBSTONE:
+                new_grid.write(rid, rec.tokens)
+            elif rec and rec.flags == FLAG_TOMBSTONE:
+                freed += rec.byte_length
+        self.close()
+        # Replace old files
+        for fname in ('alloc.grid', 'data.grid'):
+            src = os.path.join(tmp_dir, fname)
+            dst = os.path.join(self.data_dir, fname)
+            if os.path.exists(src):
+                shutil.move(src, dst)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        # Re-open
+        self._data_fd = None; self._alloc_fd = None
+        self._bootstrap()
+        new_size = os.path.getsize(self.data_path) + os.path.getsize(self.alloc_path)
+        return old_size - new_size
 
     def _unpack(self, raw: bytes, expected_bit_length: int) -> Optional[List[Token]]:
         """Unpack bytes to tokens, trying pad lengths."""
