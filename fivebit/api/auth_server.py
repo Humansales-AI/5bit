@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 from typing import Dict, Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'python'))
+from binary_grid_db import Encoder, Token
 from fivebit.auth.multimode import MultiModeGrid
 
 JWT_SECRET = os.environ.get('FIVEBIT_JWT_SECRET', 'fivebit-dev-secret-change-me').encode()
@@ -73,9 +74,18 @@ class AuthHandler:
             if not email or len(password) < 6:
                 return 400, {'error': 'Email + password (6+ chars) required'}
 
-            # Auto-increment user ID
+            # Check duplicate
+            if self._find_user(email) is not None:
+                return 409, {'error': 'Email already registered'}
+
             uid = self._next_user_id()
             self.grid.signup(uid, password, mode)
+            # Store email in grid so login can find it
+            self.grid.base.write(80_000_000 + uid, [
+                *Encoder.encode_integer(uid),
+                *Encoder.encode_word(email),
+                Token.RECORD,
+            ])
             return 201, {'userId': uid, 'mode': mode}
         except Exception as e:
             return 500, {'error': str(e)}
@@ -114,8 +124,9 @@ class AuthHandler:
     def _find_user(self, email: str) -> Optional[int]:
         for uid in range(1, 10000):
             rec = self.grid.base.read(80_000_000 + uid)
-            if not rec or rec.is_tombstone: break
-            # Mode is stored as WORD(mode) — check all users
-            # For now, just return uid (auth happens via password)
-            return uid
+            if not rec or rec.is_tombstone: continue
+            words = [p.text for p in rec.parsed if hasattr(p, 'text')]
+            stored_email = ''.join(words)
+            if stored_email == email:
+                return uid
         return None
