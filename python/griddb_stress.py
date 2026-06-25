@@ -123,19 +123,6 @@ def test_concurrent_load():
         try:
             for _ in range(deposits_per):
                 with lock:
-                    # Each thread reads the LAST value from its account slot
-                    # Records are interleaved: account N at indices N, N+50, N+100, ...
-                    tokens = wal.grid._tokens
-                    current = 0
-                    rec_idx = -1
-                    for t in tokens:
-                        if t == Token.RECORD:
-                            rec_idx += 1
-                            if rec_idx % threads == tid:
-                                # This record belongs to this account
-                                # Extract value (parse inline)
-                                pass
-                    # Simpler: just read the value at the account's last record
                     current = _read_account_value(wal, tid, threads)
                     _write_balance(wal, tid, current + 1)
         except Exception as e:
@@ -151,23 +138,11 @@ def test_concurrent_load():
 
     elapsed = (time.perf_counter() - t0) * 1000
 
-    # Verify: the LAST record for each account should have deposits_per
+    # Verify: each account should have exactly deposits_per
     total_balance = 0
     all_ok = True
-    tokens = wal.grid._tokens
-    p = Parser()
-    rec_idx = -1
-    last_vals = {}  # account → last value seen
-    for t in tokens:
-        p.feed(t)
-        if t == Token.RECORD:
-            rec_idx += 1
-            account = rec_idx % threads
-            vals = [x.value for x in p.output if isinstance(x, ParsedNumber)]
-            if vals: last_vals[account] = vals[-1]
-            p = Parser()
     for i in range(threads):
-        bal = last_vals.get(i, 0)
+        bal = _read_account_value(wal, i, threads)
         total_balance += bal
         if bal != deposits_per:
             all_ok = False
