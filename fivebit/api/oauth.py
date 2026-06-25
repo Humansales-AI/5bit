@@ -25,8 +25,25 @@ def _b64url_decode(data: str) -> bytes:
     data = data + '=' * (4 - len(data) % 4)
     return base64.urlsafe_b64decode(data)
 
-def verify_google_token(id_token: str) -> Optional[Dict]:
-    """Verify a Google id_token and return { sub, email, name, picture }."""
+def verify_google_token(id_token: str, client_id: str = '') -> Optional[Dict]:
+    """Verify a Google id_token. ALWAYS fails closed — unknown kid, missing crypto, bad sig all REJECT."""
+    # Try google-auth first (correct, fail-closed, maintained by Google)
+    try:
+        from google.oauth2 import id_token as gid
+        from google.auth.transport import requests as greq
+        info = gid.verify_oauth2_token(id_token, greq.Request(), client_id or None)
+        return {
+            'sub': info.get('sub', ''),
+            'email': info.get('email', ''),
+            'name': info.get('name', ''),
+            'picture': info.get('picture', ''),
+        }
+    except ImportError:
+        pass  # Fall through to stdlib verification
+    except Exception:
+        return None  # google-auth rejected the token — fail closed
+
+    # ── Stdlib fallback: strict, fail-closed ──────────────────────────
     try:
         parts = id_token.split('.')
         if len(parts) != 3:
@@ -35,46 +52,51 @@ def verify_google_token(id_token: str) -> Optional[Dict]:
         header = json.loads(_b64url_decode(parts[0]))
         payload = json.loads(_b64url_decode(parts[1]))
         kid = header.get('kid', '')
+        alg = header.get('alg', '')
 
-        # Verify expiration
+        # 1. Pin algorithm — never trust the token's choice
+        if alg != 'RS256':
+            return None
+
+        # 2. Verify expiration
         if payload.get('exp', 0) < time.time():
             return None
 
-        # Verify audience (optional — skip for now, validate in production)
-        # Verify issuer
+        # 3. Verify issuer
         if payload.get('iss') not in ('https://accounts.google.com', 'accounts.google.com'):
             return None
 
-        # Fetch Google JWKS and find matching key
+        # 4. Verify audience (if configured)
+        if client_id and payload.get('aud') != client_id:
+            return None
+
+        # 5. Fetch JWKS — find matching key. Missing kid = REJECT.
         jwks = json.loads(urllib.request.urlopen(GOOGLE_JWKS_URL, timeout=10).read())
         key = None
         for k in jwks.get('keys', []):
             if k.get('kid') == kid:
                 key = k
                 break
-
         if not key:
-            # Soft-fail: trust payload if JWKS fetch fails (dev mode)
-            pass
-        else:
-            # RSA verify the signature
-            try:
-                from cryptography.hazmat.primitives.asymmetric import rsa, padding
-                from cryptography.hazmat.primitives import hashes, serialization
-                from cryptography.hazmat.backends import default_backend
-                import struct
+            return None  # FAIL CLOSED — unknown kid
 
-                n = int.from_bytes(_b64url_decode(key['n']), 'big')
-                e = int.from_bytes(_b64url_decode(key['e']), 'big')
-                pubkey = rsa.RSAPublicNumbers(e, n).public_key(default_backend())
+        # 6. RSA verify signature. No crypto lib = REJECT.
+        try:
+            from cryptography.hazmat.primitives.asymmetric import rsa, padding
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.backends import default_backend
 
-                signed = f"{parts[0]}.{parts[1]}".encode()
-                signature = _b64url_decode(parts[2])
-                pubkey.verify(signature, signed, padding.PKCS1v15(), hashes.SHA256())
-            except ImportError:
-                pass  # No cryptography lib — trust payload in dev
-            except Exception:
-                return None  # Signature verification failed
+            n = int.from_bytes(_b64url_decode(key['n']), 'big')
+            e = int.from_bytes(_b64url_decode(key['e']), 'big')
+            pubkey = rsa.RSAPublicNumbers(e, n).public_key(default_backend())
+
+            signed = f"{parts[0]}.{parts[1]}".encode()
+            sig = _b64url_decode(parts[2])
+            pubkey.verify(sig, signed, padding.PKCS1v15(), hashes.SHA256())
+        except ImportError:
+            return None  # FAIL CLOSED — no crypto lib
+        except Exception:
+            return None  # FAIL CLOSED — bad signature
 
         return {
             'sub': payload.get('sub', ''),
@@ -82,6 +104,8 @@ def verify_google_token(id_token: str) -> Optional[Dict]:
             'name': payload.get('name', ''),
             'picture': payload.get('picture', ''),
         }
+    except Exception:
+        return None
     except Exception:
         return None
 
