@@ -74,51 +74,113 @@ impl ModelIsDB {
         exp / sum
     }
 
-    fn train_single(&mut self, q: &[usize], a: &[usize], lr: f32) -> f32 {
-        // Simple SGD that directly teaches the embedding table:
-        // For each Q/A pair, push the embedding of question tokens toward
-        // the embedding of answer tokens.  This is Hebbian learning —
-        // "tokens that appear together get closer."
-        let mut loss = 0.0;
-        for &ans_tok in a {
-            if ans_tok >= VOCAB { continue; }
-            // Compute context embedding (mean pool of question + previous answers)
-            let mut ctx = q.to_vec();
-            // Get embedding of the answer token we want to predict
-            let ans_emb = self.embed.row(ans_tok).to_owned();
-
-            // For each token in the context, pull its embedding toward the answer embedding
-            // Divided by sequence length to normalize
-            let n = ctx.len().min(MAX_SEQ) as f32;
-            for &ctx_tok in &ctx {
-                let t = ctx_tok.min(VOCAB - 1);
-                // Gradient: pull context token embeddings toward answer embedding
-                for j in 0..D_MODEL {
-                    let diff = self.embed[[t, j]] - ans_emb[j];
-                    self.embed[[t, j]] -= lr * 0.1 * diff / n;
-                }
-                // Also update attention weights to learn this association
-                for i in 0..D_MODEL {
-                    for j in 0..D_MODEL {
-                        self.w_q[[i, j]] -= lr * 0.001 * self.embed[[t, i]] * ans_emb[j] / n;
-                        self.w_k[[i, j]] -= lr * 0.001 * self.embed[[t, i]] * ans_emb[j] / n;
-                    }
-                }
-                // Push W_out toward the answer token
-                for j in 0..D_MODEL {
-                    self.w_out[[j, ans_tok]] += lr * 0.01 * self.embed[[t, j]] / n;
-                }
-            }
-            ctx.push(ans_tok);
-            loss += 1.0;
-        }
-        loss
-    }
-
     fn train_batch(&mut self, q_batch: &[Vec<usize>], a_batch: &[Vec<usize>], lr: f32) -> f32 {
         let mut total = 0.0;
+        let scale = (D_MODEL as f32).sqrt();
+
         for (q, a) in q_batch.iter().zip(a_batch.iter()) {
-            total += self.train_single(q, a, lr);
+            let mut ctx = q.clone();
+            for &target in a {
+                if target >= VOCAB { continue; }
+
+                // ── Forward pass ──────────────────────────────────
+                let n = ctx.len().min(MAX_SEQ);
+                let mut x = Array2::zeros((n, D_MODEL));
+                for i in 0..n {
+                    let t = ctx[i].min(VOCAB - 1);
+                    for j in 0..D_MODEL { x[[i, j]] = self.embed[[t, j]] + self.pos[[i, j]]; }
+                }
+
+                let q_val = x.dot(&self.w_q);  // [n, D]
+                let k_val = x.dot(&self.w_k);
+                let v_val = x.dot(&self.w_v);
+                let scores = q_val.dot(&k_val.t()) / scale;
+                let max_s = scores.map_axis(Axis(1), |r| *r.iter().max_by(|a,b| a.partial_cmp(b).unwrap()).unwrap());
+                let exp_s = (&scores - &max_s.insert_axis(Axis(1))).mapv(|e| e.exp());
+                let sum_s = exp_s.sum_axis(Axis(1)).insert_axis(Axis(1));
+                let attn = &exp_s / &sum_s;  // [n, n]
+                let out = attn.dot(&v_val);   // [n, D]
+                let final_h = &x + &(out.dot(&self.w_o) * 0.1);  // residual
+
+                let last = final_h.row(n - 1);
+                let logits = last.dot(&self.w_out) + &self.b_out;
+                let max_l = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                let el = logits.mapv(|e| (e - max_l).exp());
+                let sl = el.sum();
+                let probs = &el / sl;
+
+                let p = probs[target].max(1e-10);
+                total -= p.ln();
+
+                // ── Backward: output layer ──────────────────────
+                let mut d_logits = probs.clone();
+                d_logits[target] -= 1.0;
+                for j in 0..D_MODEL {
+                    for k in 0..VOCAB {
+                        self.w_out[[j, k]] -= lr * d_logits[k] * last[j];
+                    }
+                }
+                for k in 0..VOCAB { self.b_out[k] -= lr * d_logits[k]; }
+
+                // Gradient to last hidden: dL/d_last = W_out @ d_logits
+                let mut d_last = Array1::zeros(D_MODEL);
+                for j in 0..D_MODEL {
+                    for k in 0..VOCAB { d_last[j] += self.w_out[[j, k]] * d_logits[k]; }
+                }
+
+                // ── Backward: attention layer ───────────────────
+                // dL/d_out = d_last (residual passes through)
+                // dL/d_attn = d_out @ V^T
+                let mut d_attn = Array2::zeros((n, n));
+                for a_idx in 0..n {
+                    for b_idx in 0..n {
+                        for d in 0..D_MODEL {
+                            d_attn[[a_idx, b_idx]] += d_last[d] * v_val[[b_idx, d]] * 0.1;
+                        }
+                    }
+                }
+
+                // Gradient through softmax: d_scores = attn * (d_attn - sum(d_attn * attn))
+                let attn_d_attn: Array1<f32> = (0..n).map(|i| (0..n).map(|j| attn[[i, j]] * d_attn[[i, j]]).sum::<f32>()).collect();
+                let mut d_scores = Array2::zeros((n, n));
+                for i in 0..n {
+                    for j in 0..n {
+                        d_scores[[i, j]] = attn[[i, j]] * (d_attn[[i, j]] - attn_d_attn[i]);
+                    }
+                }
+                let d_scores = &d_scores / scale;
+
+                // Gradient through Q,K,V projections
+                // d_Q = d_scores @ K, d_K = d_scores^T @ Q
+                let d_q = d_scores.dot(&k_val);
+                let d_k = d_scores.t().dot(&q_val);
+                let d_v = attn.t().dot(&final_h);  // simplified — uses final hidden
+
+                // Update weights: d_W = x^T @ d_proj
+                for i in 0..D_MODEL {
+                    for j in 0..D_MODEL {
+                        let mut g_q = 0.0f32; let mut g_k = 0.0f32; let mut g_v = 0.0f32;
+                        for a_idx in 0..n {
+                            g_q += x[[a_idx, i]] * d_q[[a_idx, j]];
+                            g_k += x[[a_idx, i]] * d_k[[a_idx, j]];
+                            g_v += x[[a_idx, i]] * d_v[[a_idx, j]];
+                        }
+                        self.w_q[[i, j]] -= lr * 0.1 * g_q / n as f32;
+                        self.w_k[[i, j]] -= lr * 0.1 * g_k / n as f32;
+                        self.w_v[[i, j]] -= lr * 0.1 * g_v / n as f32;
+                    }
+                }
+
+                // Embedding gradient
+                for i in 0..n {
+                    let t = ctx[i].min(VOCAB - 1);
+                    for j in 0..D_MODEL {
+                        self.embed[[t, j]] -= lr * 0.01 * d_last[j] / n as f32;
+                    }
+                }
+
+                ctx.push(target);
+            }
         }
         total
     }
