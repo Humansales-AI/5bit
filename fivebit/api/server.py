@@ -165,12 +165,34 @@ class APIHandler(BaseHTTPRequestHandler):
             self._handle_query(params)
             return
 
+        # GET /join?left=users&right=orders&on=user_id
+        if path == '/join':
+            self._handle_join(params)
+            return
+
         # GET /replica/sync?since=<seq>
         if path == '/replica/sync':
             self._handle_sync(params)
             return
 
         self._send(404, {'error': 'Not found'})
+
+    def _handle_join(self, params: dict):
+        """Merge join using B-tree indexes."""
+        left_name = params.get('left', [''])[0]
+        right_name = params.get('right', [''])[0]
+        on_field = params.get('on', [''])[0]
+        if not left_name or not right_name or not on_field:
+            self._send(400, {'error': 'left, right, on required'})
+            return
+        try:
+            from fivebit.api.join import merge_join
+            left_spec = {'name': left_name, 'fields': self.spec.get('fields', [])}
+            right_spec = {'name': right_name, 'fields': self.spec.get('fields', [])}
+            results = merge_join(self.grid, left_spec, right_spec, on_field, self.grid.data_dir)
+            self._send(200, {'results': results, 'count': len(results)})
+        except Exception as e:
+            self._send(500, {'error': str(e)})
 
     def _handle_sync(self, params: dict):
         """Replication endpoint — WAL entries since sequence number."""
