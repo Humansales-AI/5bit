@@ -158,11 +158,15 @@ class WebhookManager:
                 addr = socket.getaddrinfo(hostname, port)[0][4][0]
                 if any(ipaddress.ip_address(addr) in net for net in BLOCKED_NETS):
                     return  # Blocked at delivery
-                ctx = ssl.create_default_context() if scheme == 'https' else None
-                conn = http.client.HTTPSConnection(addr, port, context=ctx, timeout=10) if scheme == 'https' \
-                  else http.client.HTTPConnection(addr, port, timeout=10)
-                # Pass original hostname in headers for virtual hosting + SNI
                 headers['Host'] = hostname
+                if scheme == 'https':
+                    ctx = ssl.create_default_context()
+                    sock = socket.create_connection((addr, port), timeout=10)
+                    tls_sock = ctx.wrap_socket(sock, server_hostname=hostname)  # SNI + cert match
+                    conn = http.client.HTTPSConnection(addr, port, context=ctx, timeout=10)
+                    conn.sock = tls_sock
+                else:
+                    conn = http.client.HTTPConnection(addr, port, timeout=10)
                 path = '/' + '/'.join(hook['url'].split('/', 3)[1:])
                 conn.request('POST', path, body=payload, headers=headers)
                 resp = conn.getresponse()
@@ -174,7 +178,8 @@ class WebhookManager:
             time.sleep(BACKOFF[attempt])
 
         # Dead-letter: store failed delivery in grid
-        dlq_rid = self._next_id(DELIVERY_BASE)
+        dlq_rid = DELIVERY_BASE
+        while self.grid.read(dlq_rid): dlq_rid += 1
         dlq_tokens = [
             *Encoder.encode_word(hook['url']),
             *Encoder.encode_integer(hook['id']),
