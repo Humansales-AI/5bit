@@ -323,16 +323,34 @@ class Replica:
                  stride_bits: int = 1024):
         self.master_url = master_url.rstrip('/')
         self.store = WALStore(data_dir=data_dir, stride_bits=stride_bits)
-        self._last_applied_seq = self.store.last_seq  # may have existing data
+        self._data_dir = data_dir
+        # Bug B: load persisted master cursor, not local WAL seq
+        self._last_applied_seq = self._load_cursor()
         self._sync_count = 0
         self._sync_errors = 0
+
+    def _cursor_path(self) -> str:
+        return os.path.join(self._data_dir, 'replica.cursor')
+
+    def _load_cursor(self) -> int:
+        try:
+            with open(self._cursor_path(), 'r') as f:
+                return int(f.read().strip())
+        except (FileNotFoundError, ValueError):
+            return -1
+
+    def _save_cursor(self):
+        with open(self._cursor_path(), 'w') as f:
+            f.write(str(self._last_applied_seq))
+            f.flush()
+            os.fsync(f.fileno())
 
     @property
     def last_lsn(self) -> int:
         return self._last_applied_seq
 
     def sync(self) -> dict:
-        """Pull and apply all new entries from master. Returns sync result."""
+        """Pull and apply all new entries from master. Halts on SHA failure — no holes."""
         import urllib.request
         import urllib.error
 
@@ -346,24 +364,21 @@ class Replica:
             if not entries:
                 return {'synced': 0, 'latest_seq': data.get('latest_seq', -1)}
 
-            # Verify and apply each entry
             applied = 0
             for entry in entries:
-                # Verify SHA-256
                 if not self._verify_entry(entry):
-                    print(f"  [replica] SHA-256 mismatch at seq {entry['seq']} — skipping")
+                    print(f"  [replica] SHA-256 mismatch at seq {entry['seq']} — halting sync")
                     self._sync_errors += 1
-                    continue
+                    break  # Bug A: halt, don't skip — cursor stays at last good seq
 
-                # Apply to local grid
                 tokens = [Token(t) for t in entry['tokens']]
                 self.store.write(entry['record_id'], tokens)
                 applied += 1
                 self._last_applied_seq = entry['seq']
 
+            self._save_cursor()  # Bug B: persist master cursor
             self._sync_count += 1
-            latest = entries[-1]['seq'] if entries else self._last_applied_seq
-            return {'synced': applied, 'latest_seq': latest}
+            return {'synced': applied, 'latest_seq': self._last_applied_seq}
 
         except urllib.error.URLError as e:
             self._sync_errors += 1
