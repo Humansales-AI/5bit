@@ -24,6 +24,16 @@ export class AuthClient {
     return data;
   }
 
+  async signInWithOAuth(provider: 'google' | 'github', credential: { idToken?: string; code?: string }): Promise<{ session: AuthSession } | { error: string }> {
+    const r = await fetch(`${this.baseUrl}/api/auth/oauth`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, ...credential }),
+    });
+    const data = await r.json();
+    if ('session' in data) this._token = data.session.token;
+    return data;
+  }
+
   async signOut(): Promise<void> {
     if (this._token) {
       await fetch(`${this.baseUrl}/api/auth/logout`, {
