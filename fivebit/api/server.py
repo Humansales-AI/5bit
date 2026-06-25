@@ -218,7 +218,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 try:
                     v = int(f['value'])
                     if f['op'] in ('gt', 'gte'):
-                        scanned = idx.rangeScan(v + (0 if f['op'] == 'gt' else 0), 10**9)
+                        scanned = idx.rangeScan(v + (1 if f['op'] == 'gt' else 0), 10**9)
                     else:
                         scanned = idx.rangeScan(-10**9, v + (1 if f['op'] == 'lt' else 0))
                     indexed_rids = set(scanned) if indexed_rids is None else indexed_rids & set(scanned)
@@ -270,26 +270,25 @@ class APIHandler(BaseHTTPRequestHandler):
         for f in filters:
             val = record.get(f['field'])
             if val is None: return False
-            target = f['value']
-            op = f['op']
+            target = f['value']; op = f['op']
             try:
+                ok = False
                 if isinstance(val, (int, float)):
-                    target_num = float(target)
-                    if op == 'eq': return val == target_num
-                    if op == 'gt': return val > target_num
-                    if op == 'gte': return val >= target_num
-                    if op == 'lt': return val < target_num
-                    if op == 'lte': return val <= target_num
+                    tn = float(target)
+                    if op == 'eq': ok = val == tn
+                    elif op == 'gt': ok = val > tn
+                    elif op == 'gte': ok = val >= tn
+                    elif op == 'lt': ok = val < tn
+                    elif op == 'lte': ok = val <= tn
                 else:
-                    val_str = str(val).lower()
-                    t_str = target.lower()
-                    if op == 'eq': return val_str == t_str
-                    if op == 'contains': return t_str in val_str
-                    if op == 'startsWith': return val_str.startswith(t_str)
-            except ValueError:
+                    vs = str(val).lower(); ts = target.lower()
+                    if op == 'eq': ok = vs == ts
+                    elif op == 'contains': ok = ts in vs
+                    elif op == 'startsWith': ok = vs.startswith(ts)
+                if not ok: return False  # any failing filter kills the match
+            except (ValueError, TypeError):
                 return False
-            return True
-        return True
+        return True  # all passed
 
     def _record_to_dict(self, rec, fields: list) -> dict:
         """Convert record to dict using spec fields."""
