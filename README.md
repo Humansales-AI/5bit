@@ -220,6 +220,16 @@ Encoder.encode_label(2, "name")      # cell 2 tagged "name"
 
 The server scans for CMD_LABEL tokens on startup, builds a field_name → position map, and auto-creates B-tree indexes. Labels travel with the data. Drop a labeled grid file on any server and it knows the schema instantly.
 
+**Labels solve the HashIndex fragmentation bug.** The HashIndex stores multiple key-value pairs chained in one record — digits in keys fragment the chain, making it impossible to separate a key's own digits from the record_id that follows:
+
+```
+Old (chain, broken):   WORD("email42") NUM(7) RECORD → NUM fragments break the chain
+Label (separate, fixed):  LABEL 0 "email42"           → stored as CMD_LABEL token
+                           NUM(7) RECORD              → value at position 0
+```
+
+The label is the key. The value record sits at the labeled position. No chain. No ambiguity. Same per-field record pattern that fixed webhooks, DLQ, and storage owner fields.
+
 ---
 
 ## Arithmetic — Signed Digits + Shunting-Yard
