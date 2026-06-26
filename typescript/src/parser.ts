@@ -9,15 +9,12 @@ import {
 
 // SPECIAL3 command tokens (same values as Python)
 import { Token as T } from './types';
-const CMD_AUTH = T.D0;
-const CMD_GRANT_R = T.D1;
-const CMD_GRANT_W = T.D2;
-const CMD_REVOKE = T.D3;
-const CMD_ENCRYPT = T.D4;
-const CMD_TOKENS = new Set([CMD_AUTH, CMD_GRANT_R, CMD_GRANT_W, CMD_REVOKE, CMD_ENCRYPT]);
+const CMD_AUTH = T.D0; const CMD_GRANT_R = T.D1; const CMD_GRANT_W = T.D2;
+const CMD_REVOKE = T.D3; const CMD_ENCRYPT = T.D4; const CMD_LABEL = T.D5;
+const CMD_TOKENS = new Set([CMD_AUTH, CMD_GRANT_R, CMD_GRANT_W, CMD_REVOKE, CMD_ENCRYPT, CMD_LABEL]);
 const CMD_NAMES: Record<number, string> = {
   [CMD_AUTH]: 'AUTH', [CMD_GRANT_R]: 'GRANT_R', [CMD_GRANT_W]: 'GRANT_W',
-  [CMD_REVOKE]: 'REVOKE', [CMD_ENCRYPT]: 'ENCRYPT',
+  [CMD_REVOKE]: 'REVOKE', [CMD_ENCRYPT]: 'ENCRYPT', [CMD_LABEL]: 'LABEL',
 };
 
 export class Parser {

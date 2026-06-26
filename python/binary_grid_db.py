@@ -168,10 +168,11 @@ CMD_GRANT_R = Token.D1  # 00001 — grant read access
 CMD_GRANT_W = Token.D2  # 00010 — grant write access
 CMD_REVOKE = Token.D3   # 00011 — revoke access
 CMD_ENCRYPT = Token.D4  # 00100 — mark encrypted
+CMD_LABEL = Token.D5    # 00101 — label a cell position with metadata
 
 CMD_NAMES = {
     CMD_AUTH: 'AUTH', CMD_GRANT_R: 'GRANT_R', CMD_GRANT_W: 'GRANT_W',
-    CMD_REVOKE: 'REVOKE', CMD_ENCRYPT: 'ENCRYPT',
+    CMD_REVOKE: 'REVOKE', CMD_ENCRYPT: 'ENCRYPT', CMD_LABEL: 'LABEL',
 }
 
 CMD_TOKENS = set(CMD_NAMES.keys())
@@ -439,11 +440,11 @@ class Encoder:
     @staticmethod
     def encode_command(cmd: str, arg: int) -> List[Token]:
         """Encode a SPECIAL3 control command with argument.
-        cmd: 'AUTH', 'GRANT_R', 'GRANT_W', 'REVOKE', 'ENCRYPT'
+        cmd: 'AUTH', 'GRANT_R', 'GRANT_W', 'REVOKE', 'ENCRYPT', 'LABEL'
         Depth: NUM → WORD → SPECIAL → SPECIAL2 → SPECIAL3
         """
         cmd_map = {'AUTH': CMD_AUTH, 'GRANT_R': CMD_GRANT_R, 'GRANT_W': CMD_GRANT_W,
-                   'REVOKE': CMD_REVOKE, 'ENCRYPT': CMD_ENCRYPT}
+                   'REVOKE': CMD_REVOKE, 'ENCRYPT': CMD_ENCRYPT, 'LABEL': CMD_LABEL}
         if cmd not in cmd_map:
             raise ValueError(f"Unknown command: {cmd}")
         return [
@@ -452,6 +453,20 @@ class Encoder:
             Token.END, Token.END, Token.END, Token.END,            # pop SPECIAL3→SPECIAL2→SPECIAL→WORD
             *Encoder.encode_integer(arg),                           # the argument
             Token.END,                                              # WORD→NUM
+        ]
+
+    @staticmethod
+    def encode_label(position: int, label: str) -> List[Token]:
+        """Encode a SPECIAL3 LABEL command. Tags a cell position with metadata.
+        Example: label(3, "user_id") → cell 3 is tagged "user_id"
+        """
+        return [
+            Token.START, Token.START, Token.START, Token.START,  # NUM→WORD→SPECIAL→SPECIAL2→SPECIAL3
+            CMD_LABEL,                                             # the LABEL command
+            *Encoder.encode_integer(position),                     # cell position
+            Token.END, Token.END, Token.END, Token.END,            # pop SPECIAL3→...→WORD
+            *Encoder.encode_word(label),                           # the label text
+            Token.END,                                             # WORD→NUM
         ]
 
 
