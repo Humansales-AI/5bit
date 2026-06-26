@@ -230,6 +230,22 @@ Label (separate, fixed):  LABEL 0 "email42"           → stored as CMD_LABEL to
 
 The label is the key. The value record sits at the labeled position. No chain. No ambiguity. Same per-field record pattern that fixed webhooks, DLQ, and storage owner fields.
 
+**Labels preserve original characters losslessly.** The label join rule reconstructs from the original tokens, not parsed integer values:
+
+```
+"user 42" — space lives as WORD(' ') in the stream:
+  Tokens:   START START u s e r END T_POW END D4 D2 END
+  Parsed:   WORD('user')  WORD(' ')  NUM(4)  NUM(2)
+  Label join at pos 0:  "user" + " " + "4" + "2" = "user 42" ✓
+
+"id007" — leading zeros are NUM(0) tokens with value 0:
+  Tokens:   START START i d END END D0 D0 D7 END
+  Parsed:   WORD('id')  NUM(0)  NUM(0)  NUM(7)
+  Label join at pos 0:  "id" + "0" + "0" + "7" = "id007" ✓
+```
+
+`str(NUM(0).value) = "0"` — the original digit text, not the integer 7. The token stores the digit, the parser stores the digit, the join concatenates the digits. Lossless. Labels solve field boundaries AND character preservation in the same mechanism.
+
 ---
 
 ## Arithmetic — Signed Digits + Shunting-Yard
