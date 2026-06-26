@@ -63,12 +63,12 @@ class RealtimeServer:
 
     def broadcast_change(self, table: str, event: dict):
         with self._lock:
-            subs = self.subscribers.get(table, set())
+            subs = list(self.subscribers.get(table, set()))  # snapshot — safe to iterate
         dead = []
         for ws in subs:
             try:
                 ws.send(json.dumps({'type': 'change', 'table': table, 'event': event}))
-            except:
+            except Exception:
                 dead.append(ws)
         for ws in dead:
             with self._lock:
@@ -84,13 +84,13 @@ class RealtimeServer:
 
     def publish(self, channel: str, message: dict, sender_ws=None):
         with self._lock:
-            subs = self.channels.get(channel, set())
+            subs = list(self.channels.get(channel, set()))  # snapshot
         dead = []
         for ws in subs:
             if ws is sender_ws: continue
             try:
                 ws.send(json.dumps({'type': 'broadcast', 'channel': channel, 'payload': message}))
-            except:
+            except Exception:
                 dead.append(ws)
         for ws in dead:
             with self._lock:
