@@ -259,6 +259,41 @@ export class AllocGrid {
     fs.closeSync(fd);
   }
 
+  /** Label-driven reconstruction: join tokens at labeled positions into named fields. */
+  static reconstructByLabels(parsed: ParsedToken[]): Record<string, string> {
+    const labels: Record<number, string> = {};  // position → label name
+    const values: Record<number, string[]> = {}; // position → token texts
+    let inLabel = false; let labelPos = 0; let inLabelName = false;
+
+    for (const p of parsed) {
+      if ((p as any).type === 'command' && (p as any).cmd === 'LABEL') {
+        inLabel = true; continue;
+      }
+      if (inLabel && p.type === 'number') {
+        labelPos = (p as any).value; continue;
+      }
+      if (inLabel && p.type === 'word') {
+        labels[labelPos] = (p as any).text;
+        if (!values[labelPos]) values[labelPos] = [];
+        inLabel = false; continue;
+      }
+      if (p.type === 'control') continue;  // skip RECORD, END, START
+
+      // Data tokens — assign to current position
+      const pos = Object.keys(values).length > 0 ? Math.max(...Object.keys(values).map(Number)) : 0;
+      if (!values[pos]) values[pos] = [];
+      if (p.type === 'number') values[pos].push(String((p as any).value));
+      else if (p.type === 'word') values[pos].push((p as any).text);
+    }
+
+    // Build result from labels + values
+    const result: Record<string, string> = {};
+    for (const [pos, name] of Object.entries(labels)) {
+      result[name] = (values[Number(pos)] || []).join('');
+    }
+    return result;
+  }
+
   /** Reconstruct a string from ALL parsed tokens — words + numbers + specials. */
   static reconstructAll(parsed: ParsedToken[]): string {
     let result = '';

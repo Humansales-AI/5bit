@@ -70,8 +70,11 @@ export class Parser {
   private finalizeSpecial3(): void {
     if (this.accumulator.length === 0) return;
     const cmd = this.accumulator[0] as number;
-    if (CMD_NAMES[cmd]) {
-      this.output.push({ type: 'command', cmd: CMD_NAMES[cmd] } as any);
+    const name = CMD_NAMES[cmd];
+    if (name) {
+      this.output.push({ type: 'command', cmd: name, token: cmd } as any);
+      // For LABEL: next NUM in the output is the position, next WORD is the label text
+      // The parser will emit these as they arrive after the command token
     }
     this.accumulator = [];
   }

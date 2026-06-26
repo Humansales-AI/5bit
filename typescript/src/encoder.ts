@@ -142,4 +142,17 @@ export class Encoder {
     tokens.push(Token.RECORD);
     return tokens;
   }
+
+  /** Label a cell position with metadata text. SPECIAL3 command. */
+  static encodeLabel(position: number, label: string): Token[] {
+    const CMD_LABEL = Token.D5;
+    return [
+      Token.START, Token.START, Token.START, Token.START,  // NUM→WORD→SPECIAL→SPECIAL2→SPECIAL3
+      CMD_LABEL,
+      ...Encoder.encodeInteger(position),
+      Token.END, Token.END, Token.END, Token.END,            // pop SPECIAL3→SPECIAL2→SPECIAL→WORD
+      ...Encoder.encodeWord(label),
+      Token.END,                                             // WORD→NUM
+    ];
+  }
 }
