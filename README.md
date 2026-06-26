@@ -105,7 +105,7 @@ Four contexts, same 32 binary codes. 28 mappable slots each (00000–11011). Fou
 | `00010` | `2` | `C`  | `c`     | `#`      | `GRANT_W`|
 | `00011` | `3` | `D`  | `d`     | `$`      | `REVOKE` |
 | `00100` | `4` | `E`  | `e`     | `%`      | `ENCRYPT`|
-| `00101` | `5` | `F`  | `f`     | `&`      | `—`      |
+| `00101` | `5` | `F`  | `f`     | `&`      | `LABEL`  |
 | `00110` | `6` | `G`  | `g`     | `'`      | `—`      |
 | `00111` | `7` | `H`  | `h`     | `(`      | `—`      |
 | `01000` | `8` | `I`  | `i`     | `)`      | `—`      |
@@ -178,7 +178,7 @@ REVOKE(user_id)   — revoke access from user
 ENCRYPT(key_id)   — mark record as encrypted with key
 ```
 
-21 reserved slots remain for future commands. CMD_LABEL (00101) tags cell positions with metadata — the data describes itself:
+20 reserved slots remain for future commands. CMD_LABEL (00101) tags cell positions with metadata — the data describes itself:
 
 ```
 LABEL 0 "user_id"    START×4 D5 D0 END×4  START u s e r _ i d END END
