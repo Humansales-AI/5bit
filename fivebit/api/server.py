@@ -290,8 +290,8 @@ class APIHandler(BaseHTTPRequestHandler):
                 return False
         return True  # all passed
 
-    def _record_to_dict(self, rec, fields: list) -> dict:
-        """Convert record to dict using spec fields."""
+    def _record_to_dict(self, rec, fields=None) -> dict:
+        """Convert record to dict using labels (or spec fields as fallback)."""
         result = {}
         vals = []
         pending = ''
@@ -302,8 +302,11 @@ class APIHandler(BaseHTTPRequestHandler):
             elif isinstance(p, ParsedWord):
                 pending += p.text
         if pending: vals.append(pending)
-        for i, field in enumerate(fields):
-            if i < len(vals): result[field] = vals[i]
+        # Use labels to map positions → field names
+        field_list = fields or list(self._labels.keys()) or self.spec.get('fields', [])
+        for i, field in enumerate(field_list):
+            pos = self._labels.get(field, i)  # label position or positional fallback
+            if pos < len(vals): result[field] = vals[pos]
         result['_id'] = rec.record_id
         return result
 
@@ -422,14 +425,34 @@ class APIServer:
         APIHandler.spec = spec
         from fivebit.api.ratelimit import APIRateLimiter
         APIHandler.rate_limiter = APIRateLimiter()
-        APIHandler._server_instance = self  # Wire realtime broadcast
-        # B-tree indexes — one per numeric field in spec
+        APIHandler._server_instance = self
+        # Label-driven B-tree indexes — auto-discovered from CMD_LABEL tokens
         self._indexes = {}
-        for f in spec.get('fields', []):
-            try:
-                from griddb_index import BTreeIndex
-                self._indexes[f] = BTreeIndex(f, data_dir=data_dir)
-            except ImportError: pass
+        self._labels = {}  # field_name → token_position
+        self._discover_labels()
+
+    def _discover_labels(self):
+        """Scan records for CMD_LABEL tokens, build field_name → position map."""
+        from griddb_index import BTreeIndex
+        from binary_grid_db import CMD_LABEL, CMD_NAMES, ParsedNumber, ParsedWord
+        self._labels = {}
+        for rid in range(min(self.grid.total_entries, 1000)):
+            rec = self.grid.read(rid)
+            if not rec or rec.is_tombstone: continue
+            in_label = False; pos = 0
+            for p in rec.parsed:
+                if isinstance(p, dict) and p.get('cmd') == 'LABEL':
+                    in_label = True; continue
+                if in_label and isinstance(p, ParsedNumber):
+                    pos = p.value; continue
+                if in_label and isinstance(p, ParsedWord):
+                    name = p.text
+                    if name:
+                        self._labels[name] = pos
+                        # Auto-create B-tree index
+                        if name not in self._indexes:
+                            self._indexes[name] = BTreeIndex(name, data_dir=self.grid.data_dir)
+                    in_label = False
 
     def _broadcast_change(self, table: str, event_type: str, record: dict):
         """Notify realtime subscribers + update B-tree indexes."""
