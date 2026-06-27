@@ -333,6 +333,36 @@ class AllocGrid:
         return rec
 
     @staticmethod
+    def reconstruct_by_labels(parsed: list) -> dict:
+        """Label-driven reconstruction: join tokens at labeled positions into named fields."""
+        labels = {}   # position → label name
+        values = {}   # position → token texts
+        in_label = False; label_pos = 0; data_pos = 0
+
+        for p in parsed:
+            if isinstance(p, dict) and p.get('cmd') == 'LABEL':
+                in_label = True; continue
+            if in_label and isinstance(p, ParsedNumber):
+                label_pos = p.value; continue
+            if in_label and isinstance(p, ParsedWord):
+                labels[label_pos] = p.text; in_label = False; continue
+            if hasattr(p, 'type') and p.type == 'control':
+                if p.token == Token.END and values.get(data_pos):
+                    data_pos += 1
+                continue
+
+            if data_pos not in values: values[data_pos] = []
+            if isinstance(p, ParsedNumber):
+                values[data_pos].append(str(p.value))
+            elif isinstance(p, ParsedWord):
+                values[data_pos].append(p.text)
+
+        result = {}
+        for pos, name in labels.items():
+            result[name] = ''.join(values.get(pos, []))
+        return result
+
+    @staticmethod
     def reconstruct_all(parsed: list) -> str:
         """Reconstruct a string from parsed word+number tokens. Skips control tokens."""
         result = ''

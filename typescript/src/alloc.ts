@@ -263,9 +263,11 @@ export class AllocGrid {
   static reconstructByLabels(parsed: ParsedToken[]): Record<string, string> {
     const labels: Record<number, string> = {};  // position → label name
     const values: Record<number, string[]> = {}; // position → token texts
-    let inLabel = false; let labelPos = 0; let inLabelName = false;
+    let inLabel = false; let labelPos = 0;
+    let dataPos = 0;  // sequential position counter for data tokens
 
     for (const p of parsed) {
+      // Label header detection
       if ((p as any).type === 'command' && (p as any).cmd === 'LABEL') {
         inLabel = true; continue;
       }
@@ -274,19 +276,22 @@ export class AllocGrid {
       }
       if (inLabel && p.type === 'word') {
         labels[labelPos] = (p as any).text;
-        if (!values[labelPos]) values[labelPos] = [];
         inLabel = false; continue;
       }
-      if (p.type === 'control') continue;  // skip RECORD, END, START
+      if (p.type === 'control') {
+        // END terminates current value field
+        if ((p as any).token === Token.END && values[dataPos]?.length > 0) {
+          dataPos++;  // advance to next field position
+        }
+        continue;
+      }
 
-      // Data tokens — assign to current position
-      const pos = Object.keys(values).length > 0 ? Math.max(...Object.keys(values).map(Number)) : 0;
-      if (!values[pos]) values[pos] = [];
-      if (p.type === 'number') values[pos].push(String((p as any).value));
-      else if (p.type === 'word') values[pos].push((p as any).text);
+      // Data tokens — assign by sequential position
+      if (!values[dataPos]) values[dataPos] = [];
+      if (p.type === 'number') values[dataPos].push(String((p as any).value));
+      else if (p.type === 'word') values[dataPos].push((p as any).text);
     }
 
-    // Build result from labels + values
     const result: Record<string, string> = {};
     for (const [pos, name] of Object.entries(labels)) {
       result[name] = (values[Number(pos)] || []).join('');
