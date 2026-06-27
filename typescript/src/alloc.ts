@@ -269,7 +269,7 @@ export class AllocGrid {
     for (const p of parsed) {
       // Label header detection
       if ((p as any).type === 'command' && (p as any).cmd === 'LABEL') {
-        inLabel = true; continue;
+        dataPos++; inLabel = true; continue;  // New label = new field position
       }
       if (inLabel && p.type === 'word') {
         const text = (p as any).text;
@@ -281,13 +281,7 @@ export class AllocGrid {
         if (pending) { labels[(p as any).value] = pending; delete labels[`_p_${dataPos}`]; }
         inLabel = false; continue;
       }
-      if (p.type === 'control') {
-        // END terminates current value field
-        if ((p as any).token === Token.END && values[dataPos]?.length > 0) {
-          dataPos++;  // advance to next field position
-        }
-        continue;
-      }
+      if (p.type === 'control') continue;  // Skip — position advances on LABEL
 
       // Data tokens — assign by sequential position
       if (!values[dataPos]) values[dataPos] = [];

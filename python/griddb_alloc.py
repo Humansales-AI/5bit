@@ -341,6 +341,7 @@ class AllocGrid:
 
         for p in parsed:
             if isinstance(p, dict) and p.get('cmd') == 'LABEL':
+                data_pos += 1  # New label = new field position
                 in_label = True; continue
             if in_label and isinstance(p, ParsedWord):
                 if p.text: labels[f'_pending_{data_pos}'] = p.text  # name before position
@@ -351,9 +352,7 @@ class AllocGrid:
                 if pending: labels[p.value] = pending
                 in_label = False; continue
             if hasattr(p, 'type') and p.type == 'control':
-                if p.token == Token.END and values.get(data_pos):
-                    data_pos += 1
-                continue
+                continue  # Skip control tokens — position advances on LABEL
 
             if data_pos not in values: values[data_pos] = []
             if isinstance(p, ParsedNumber):
