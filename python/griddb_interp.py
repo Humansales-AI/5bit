@@ -12,7 +12,8 @@ THE VERBS (SPECIAL3 free slots 6..13 — first spend of the 22-slot budget):
     DEF   = 6    "this record is a program"; CALL refuses non-DEF records
     CALL  = 7    run program at slot N; shared value stack carries args/returns
     RET   = 8    early return (end of record = implicit RET)
-    IF    = 9    pop test; nonzero -> run then-region, else skip to else-region
+    IF    = 9    pop t; THREE-WAY dispatch on sign(t): (+arm)(0arm)(-arm);
+                 absent arms skip; booleans are the degenerate case
     LOOP  = 10   repeat region until BREAK (all loops = LOOP + IF + BREAK)
     BREAK = 11   unwind to just past the innermost LOOP region
     STORE = 12   pop value, append it as the new version of slot N
@@ -235,18 +236,36 @@ class Machine:
         if cmd == CMD_BREAK:
             raise _Break()
         if cmd == CMD_IF:
+            # THREE-WAY IF (architect's ruling): the branch sees the full
+            # sign of the number — the answer subtraction already computed.
+            # IF binds up to three consecutive regions, positionally:
+            #     ( +arm ) ( 0arm ) ( -arm )
+            # sign(test) picks the arm; an absent arm is a skip. The old
+            # boolean style is the degenerate case (1 -> +arm, 0 -> 0arm),
+            # so flag-tests keep working unchanged. All six relations fall
+            # out of ONE MINUS + region placement, zero new tokens:
+            #     a >  b :  a b -  IF (X)            a == b :  a b -  IF ()(X)
+            #     a <  b :  a b -  IF ()()(X)        a >= b :  a b -  IF (X)(X)
+            #     a <= b :  a b -  IF ()(X)(X)       a != b :  a b -  IF (X)()(X)
+            # (shared arms may CALL a common slot instead of duplicating)
             test = self.stack.pop()
-            then_open = self._expect(toks, pos, LPAREN, 'IF needs ( then-region )')
-            then_close = self._match(toks, then_open, end)
-            after = then_close + 1
-            has_else = after < end and toks[after] == LPAREN
-            else_close = self._match(toks, after, end) if has_else else None
-            self.trace.append(f"IF -> {'then' if test else 'else'}")
-            if test:
-                self._exec(toks, then_open + 1, then_close)
-            elif has_else:
-                self._exec(toks, after + 1, else_close)
-            return (else_close + 1) if has_else else after
+            sign = (test > 0) - (test < 0)
+            regions = []
+            p = pos
+            while len(regions) < 3 and p < end and toks[p] == LPAREN:
+                close = self._match(toks, p, end)
+                regions.append((p + 1, close))
+                p = close + 1
+            if not regions:
+                raise InterpreterError('IF needs at least one ( region )')
+            idx = {1: 0, 0: 1, -1: 2}[sign]
+            arm = ('+', '0', '-')[idx]
+            if idx < len(regions):
+                self.trace.append(f"IF {test:+d} -> {arm}-arm")
+                self._exec(toks, *regions[idx])
+            else:
+                self.trace.append(f"IF {test:+d} -> {arm}-arm absent, skip")
+            return p
         if cmd == CMD_LOOP:
             open_ = self._expect(toks, pos, LPAREN, 'LOOP needs ( region )')
             close = self._match(toks, open_, end)
