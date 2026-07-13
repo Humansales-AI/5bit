@@ -8,7 +8,7 @@ import WebRTC
 
 struct JoinView: View {
     @State private var room = "default"
-    @State private var serverURL = "ws://localhost:8085"
+    @State private var serverURL = ""  // Enter your Mac's IP: ws://192.168.x.x:8085
     @State private var isCallActive = false
     @StateObject private var call = CallManager()
 
@@ -24,7 +24,7 @@ struct JoinView: View {
                     VStack(spacing: 16) {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("SERVER").font(.system(size: 10, weight: .bold)).foregroundColor(Color(hex: "555555")).tracking(1)
-                            TextField("ws://localhost:8085", text: $serverURL).padding(12).background(Color(hex: "16161f")).cornerRadius(8).foregroundColor(.white)
+                            TextField("ws://192.168.1.100:8085", text: $serverURL).padding(12).background(Color(hex: "16161f")).cornerRadius(8).foregroundColor(.white)
                         }
                         VStack(alignment: .leading, spacing: 6) {
                             Text("ROOM").font(.system(size: 10, weight: .bold)).foregroundColor(Color(hex: "555555")).tracking(1)

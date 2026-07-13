@@ -1,0 +1,115 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		C5A1E0CEBD36415296E854E7 /* FivebitWebRTCApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70328118CE554AC7902F56CB /* FivebitWebRTCApp.swift */; };
+		3B059DA6A93845FDA662F8CC /* CallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8501AC8BDB1D45F6B9F1A8BF /* CallView.swift */; };
+		0E36557B9CE54EFC85CC3C5A /* SignalingClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F62077785DD47D49EE33086 /* SignalingClient.swift */; };
+		03AA13854E1748C79E703EAA /* WebRTCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A08278AB3747A1B50A9421 /* WebRTCClient.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		70328118CE554AC7902F56CB /* FivebitWebRTCApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FivebitWebRTCApp.swift; sourceTree = "<group>"; };
+		8501AC8BDB1D45F6B9F1A8BF /* CallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallView.swift; sourceTree = "<group>"; };
+		6F62077785DD47D49EE33086 /* SignalingClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalingClient.swift; sourceTree = "<group>"; };
+		75A08278AB3747A1B50A9421 /* WebRTCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRTCClient.swift; sourceTree = "<group>"; };
+		CCBFC28EB6BE41B6BF6A560D /* FivebitWebRTC.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FivebitWebRTC.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		BD33FFD3CD624E588F189F61 = {isa = PBXGroup; children = (70328118CE554AC7902F56CB, 8501AC8BDB1D45F6B9F1A8BF, 6F62077785DD47D49EE33086, 75A08278AB3747A1B50A9421); sourceTree = "<group>"; };
+		1BEFBD3157BA437E92CDE897 = {isa = PBXGroup; children = (CCBFC28EB6BE41B6BF6A560D); name = Products; sourceTree = "<group>"; };
+		95355738CF214A22B2B865F3 = {isa = PBXGroup; children = (BD33FFD3CD624E588F189F61, 1BEFBD3157BA437E92CDE897); sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		FEA4F5E019A142F08DF0F4C4 /* FivebitWebRTC */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8BD81938DAE74DC18834B916 /* Build configuration list */;
+			buildPhases = (9D303DA920744BD086F87FE4);
+			buildRules = ();
+			dependencies = ();
+			name = FivebitWebRTC;
+			productName = FivebitWebRTC;
+			productReference = CCBFC28EB6BE41B6BF6A560D;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C98FA6CD6B984D7E8D7E1256 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1630;
+				LastUpgradeCheck = 1630;
+			};
+			buildConfigurationList = 411BACBDA4AB476EB3EC0BE8 /* Build configuration list for PBXProject */;
+			compatibilityVersion = "Xcode 14.0";
+			mainGroup = 95355738CF214A22B2B865F3;
+			productRefGroup = 1BEFBD3157BA437E92CDE897;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (FEA4F5E019A142F08DF0F4C4);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		9D303DA920744BD086F87FE4 /* Sources */ = {isa = PBXSourcesBuildPhase; files = (C5A1E0CEBD36415296E854E7, 3B059DA6A93845FDA662F8CC, 0E36557B9CE54EFC85CC3C5A, 03AA13854E1748C79E703EAA); };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		716249890BF44A17B3C17EA3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.humansales.fivebit.webrtc;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		9EBDD338319C4F229F89F680 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.humansales.fivebit.webrtc;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		15BD7893137D4D078D924089 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {}; name = Debug; };
+		64BB5318F9F448FBA8CE56E0 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {}; name = Release; };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		8BD81938DAE74DC18834B916 = {isa = XCConfigurationList; buildConfigurations = (716249890BF44A17B3C17EA3, 9EBDD338319C4F229F89F680); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		2696E4864F534BA08F86ED9C = {isa = XCConfigurationList; buildConfigurations = (4601F982D84F46988A7E2E0B, BF842899CB5A4851ACA46B02); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = C98FA6CD6B984D7E8D7E1256 /* Project object */;
+}
