@@ -314,7 +314,12 @@ int main(int argc, char **argv) {
     struct sockaddr_in c; socklen_t cl = sizeof(c);
     int cf = accept(s, (struct sockaddr*)&c, &cl);
     if (cf < 0) continue;
-    handle(cf, data_dir);
+    if (fork() == 0) {
+      close(s);           /* child doesn't need listener */
+      handle(cf, data_dir);
+      exit(0);
+    }
+    close(cf);            /* parent doesn't need client */
   }
   close(s); return 0;
 }
