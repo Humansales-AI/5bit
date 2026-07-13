@@ -49,12 +49,12 @@ final class WebRTCClient: NSObject {
         peerConnection.add(localVideoTrack, streamIds: ["stream0"])
     }
 
-    func startCapture(videoView: RTCVideoRenderer) {
+    func startCapture(videoView: RTCMTLVideoView) {
         localVideoTrack.add(videoView)
     }
 
-    func renderRemoteVideo(to renderer: RTCVideoRenderer) {
-        remoteVideoTrack?.add(renderer)
+    func renderRemoteVideo(to view: RTCMTLVideoView) {
+        remoteVideoTrack?.add(view)
     }
 
     func offer(completion: @escaping (_ sdp: RTCSessionDescription) -> Void) {
@@ -93,8 +93,8 @@ extension WebRTCClient: RTCPeerConnectionDelegate {
         delegate?.webRTCClient(self, didGenerate: candidate)
     }
 
-    func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {
-        delegate?.webRTCClient(self, didChange: newState)
+    func peerConnection(_ peerConnection: RTCPeerConnection, didChange state: RTCIceConnectionState) {
+        delegate?.webRTCClient(self, didChange: state)
     }
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {
@@ -105,8 +105,13 @@ extension WebRTCClient: RTCPeerConnectionDelegate {
     }
 
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
-    func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
+    func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCSignalingState) {}
+    func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {}
+    func peerConnection(_ peerConnection: RTCPeerConnection, didAdd rtpReceiver: RTCRtpReceiver, streams: [RTCMediaStream]) {}
+    func peerConnection(_ peerConnection: RTCPeerConnection, didRemove rtpReceiver: RTCRtpReceiver) {}
+    func peerConnection(_ peerConnection: RTCPeerConnection, didStartReceivingOn transceiver: RTCRtpTransceiver) {}
+    func peerConnection(_ peerConnection: RTCPeerConnection, didChange localCandidate: RTCIceCandidate, remoteCandidate: RTCIceCandidate, lastReceivedMs: Int32, changeReason: String) {}
 }

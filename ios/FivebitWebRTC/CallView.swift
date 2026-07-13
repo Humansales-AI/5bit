@@ -8,7 +8,7 @@ import WebRTC
 
 struct JoinView: View {
     @State private var room = "default"
-    @State private var serverURL = ""  // Enter your Mac's IP: ws://192.168.x.x:8085
+    @State private var serverURL = "wss://endearing-harmony-production.up.railway.app"
     @State private var isCallActive = false
     @StateObject private var call = CallManager()
 
@@ -24,7 +24,7 @@ struct JoinView: View {
                     VStack(spacing: 16) {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("SERVER").font(.system(size: 10, weight: .bold)).foregroundColor(Color(hex: "555555")).tracking(1)
-                            TextField("ws://192.168.1.100:8085", text: $serverURL).padding(12).background(Color(hex: "16161f")).cornerRadius(8).foregroundColor(.white)
+                            TextField("Railway server URL", text: $serverURL).padding(12).background(Color(hex: "16161f")).cornerRadius(8).foregroundColor(.white)
                         }
                         VStack(alignment: .leading, spacing: 6) {
                             Text("ROOM").font(.system(size: 10, weight: .bold)).foregroundColor(Color(hex: "555555")).tracking(1)
@@ -63,8 +63,8 @@ struct ActiveCallView: View {
                         .padding(.horizontal, 10).padding(.vertical, 4).background(Color(hex: "e94560").opacity(0.15)).cornerRadius(6)
                 }.padding()
 
-                VideoView(renderer: call.remoteRenderer).cornerRadius(12).padding(.horizontal, 8)
-                VideoView(renderer: call.localRenderer).frame(width: 120, height: 180).cornerRadius(10)
+                VideoView(view: call.remoteView).cornerRadius(12).padding(.horizontal, 8)
+                VideoView(view: call.localView).frame(width: 120, height: 180).cornerRadius(10)
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(hex: "2a2a3e"), lineWidth: 1))
                     .padding(.trailing, 16).frame(maxWidth: .infinity, alignment: .trailing).offset(y: -30)
 
@@ -95,16 +95,9 @@ struct ActiveCallView: View {
 // MARK: - Native Video Renderer Wrapper
 
 struct VideoView: UIViewRepresentable {
-    let renderer: RTCVideoRenderer
-    func makeUIView(context: Context) -> RTCMTLVideoView {
-        let v = RTCMTLVideoView(); v.videoContentMode = .scaleAspectFill; return v
-    }
-    func updateUIView(_ uiView: RTCMTLVideoView, context: Context) {
-        renderer.setRenderer(uiView)
-    }
-    static func dismantleUIView(_ uiView: RTCMTLVideoView, coordinator: ()) {
-        uiView.renderer = nil
-    }
+    let view: RTCMTLVideoView
+    func makeUIView(context: Context) -> RTCMTLVideoView { view }
+    func updateUIView(_ uiView: RTCMTLVideoView, context: Context) {}
 }
 
 // MARK: - Call Manager (ViewModel)
@@ -114,16 +107,16 @@ class CallManager: NSObject, ObservableObject {
     @Published var isMuted = false
     @Published var isVideoPaused = false
 
-    let localRenderer: RTCEAGLVideoView
-    let remoteRenderer: RTCEAGLVideoView
+    let localView = RTCMTLVideoView()
+    let remoteView = RTCMTLVideoView()
 
     private var signaling: SignalingClient?
     private var rtc: WebRTCClient?
     private var hasRemoteSDP = false
 
     override init() {
-        localRenderer = RTCEAGLVideoView(frame: .zero)
-        remoteRenderer = RTCEAGLVideoView(frame: .zero)
+        localView.videoContentMode = .scaleAspectFill
+        remoteView.videoContentMode = .scaleAspectFill
         super.init()
     }
 
@@ -135,7 +128,7 @@ class CallManager: NSObject, ObservableObject {
 
         rtc = WebRTCClient()
         rtc?.delegate = self
-        rtc?.startCapture(videoView: localRenderer)
+        rtc?.startCapture(videoView: localView)
         connectionState = "connecting"
     }
 
@@ -197,7 +190,7 @@ extension CallManager: WebRTCClientDelegate {
     }
 
     func webRTCClient(_ client: WebRTCClient, didReceiveRemoteVideo track: RTCVideoTrack) {
-        DispatchQueue.main.async { track.add(self.remoteRenderer) }
+        DispatchQueue.main.async { track.add(self.remoteView) }
     }
 
     func webRTCClient(_ client: WebRTCClient, didChange state: RTCIceConnectionState) {

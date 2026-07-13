@@ -7,65 +7,190 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		C5A1E0CEBD36415296E854E7 /* FivebitWebRTCApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70328118CE554AC7902F56CB /* FivebitWebRTCApp.swift */; };
-		3B059DA6A93845FDA662F8CC /* CallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8501AC8BDB1D45F6B9F1A8BF /* CallView.swift */; };
-		0E36557B9CE54EFC85CC3C5A /* SignalingClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F62077785DD47D49EE33086 /* SignalingClient.swift */; };
-		03AA13854E1748C79E703EAA /* WebRTCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A08278AB3747A1B50A9421 /* WebRTCClient.swift */; };
+		0858E0E005C2A961ABECFA20 /* Pods_FivebitWebRTC.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D13F7403F040CF44CED98340 /* Pods_FivebitWebRTC.framework */; };
+		09EAEA30E60526719767DB30 /* CallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AB4FDB0C8BAFF2F19D4BA9D /* CallView.swift */; };
+		7E09001B221AD05DE4398EED /* WebRTCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8310B8FB6DBAFF1E017E40B5 /* WebRTCClient.swift */; };
+		88E308CACAA941F7BE1ADD50 /* FivebitWebRTCApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF58A4C6979325774308B6FF /* FivebitWebRTCApp.swift */; };
+		926D7DDAB66D004BC714E5C5 /* SignalingClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54FF6371A8EB47A678C08F52 /* SignalingClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		70328118CE554AC7902F56CB /* FivebitWebRTCApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FivebitWebRTCApp.swift; sourceTree = "<group>"; };
-		8501AC8BDB1D45F6B9F1A8BF /* CallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallView.swift; sourceTree = "<group>"; };
-		6F62077785DD47D49EE33086 /* SignalingClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalingClient.swift; sourceTree = "<group>"; };
-		75A08278AB3747A1B50A9421 /* WebRTCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRTCClient.swift; sourceTree = "<group>"; };
-		CCBFC28EB6BE41B6BF6A560D /* FivebitWebRTC.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FivebitWebRTC.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3D12A54C07F9B703E086CCD0 /* Pods-FivebitWebRTC.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-FivebitWebRTC.release.xcconfig"; path = "Target Support Files/Pods-FivebitWebRTC/Pods-FivebitWebRTC.release.xcconfig"; sourceTree = "<group>"; };
+		54FF6371A8EB47A678C08F52 /* SignalingClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignalingClient.swift; sourceTree = "<group>"; };
+		599F2B2405EA9762F3AD70A6 /* Pods-FivebitWebRTC.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-FivebitWebRTC.debug.xcconfig"; path = "Target Support Files/Pods-FivebitWebRTC/Pods-FivebitWebRTC.debug.xcconfig"; sourceTree = "<group>"; };
+		5AB4FDB0C8BAFF2F19D4BA9D /* CallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallView.swift; sourceTree = "<group>"; };
+		8310B8FB6DBAFF1E017E40B5 /* WebRTCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRTCClient.swift; sourceTree = "<group>"; };
+		CF58A4C6979325774308B6FF /* FivebitWebRTCApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FivebitWebRTCApp.swift; sourceTree = "<group>"; };
+		D13F7403F040CF44CED98340 /* Pods_FivebitWebRTC.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_FivebitWebRTC.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		D6E4A9B6646C62FC48BAA6DD /* FivebitWebRTC.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FivebitWebRTC.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFrameworksBuildPhase section */
+		AD5E4EF2F19448D1AABBAAB7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0858E0E005C2A961ABECFA20 /* Pods_FivebitWebRTC.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXGroup section */
-		BD33FFD3CD624E588F189F61 = {isa = PBXGroup; children = (70328118CE554AC7902F56CB, 8501AC8BDB1D45F6B9F1A8BF, 6F62077785DD47D49EE33086, 75A08278AB3747A1B50A9421); sourceTree = "<group>"; };
-		1BEFBD3157BA437E92CDE897 = {isa = PBXGroup; children = (CCBFC28EB6BE41B6BF6A560D); name = Products; sourceTree = "<group>"; };
-		95355738CF214A22B2B865F3 = {isa = PBXGroup; children = (BD33FFD3CD624E588F189F61, 1BEFBD3157BA437E92CDE897); sourceTree = "<group>"; };
+		1849FC21AAEE98122148FC2B /*  */ = {
+			isa = PBXGroup;
+			children = (
+				CF58A4C6979325774308B6FF /* FivebitWebRTCApp.swift */,
+				5AB4FDB0C8BAFF2F19D4BA9D /* CallView.swift */,
+				54FF6371A8EB47A678C08F52 /* SignalingClient.swift */,
+				8310B8FB6DBAFF1E017E40B5 /* WebRTCClient.swift */,
+			);
+			path = "";
+			sourceTree = "<group>";
+		};
+		36303EABBFC709923008105E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D6E4A9B6646C62FC48BAA6DD /* FivebitWebRTC.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		69D754613BAA49B5672B8315 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				599F2B2405EA9762F3AD70A6 /* Pods-FivebitWebRTC.debug.xcconfig */,
+				3D12A54C07F9B703E086CCD0 /* Pods-FivebitWebRTC.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
+		7718F0242D404B5C041FDB0E /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				D13F7403F040CF44CED98340 /* Pods_FivebitWebRTC.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		7882D14E196057770B59E53D = {
+			isa = PBXGroup;
+			children = (
+				1849FC21AAEE98122148FC2B /*  */,
+				36303EABBFC709923008105E /* Products */,
+				69D754613BAA49B5672B8315 /* Pods */,
+				7718F0242D404B5C041FDB0E /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		FEA4F5E019A142F08DF0F4C4 /* FivebitWebRTC */ = {
+		42AEFBAE01D2DFD981F7DA7D /* FivebitWebRTC */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 8BD81938DAE74DC18834B916 /* Build configuration list */;
-			buildPhases = (9D303DA920744BD086F87FE4);
-			buildRules = ();
-			dependencies = ();
+			buildConfigurationList = DDC96F7C1D62EA89141E06E0 /* Build configuration list for PBXNativeTarget "FivebitWebRTC" */;
+			buildPhases = (
+				1602FBCAA31C98979CF3F954 /* [CP] Check Pods Manifest.lock */,
+				7D5580843CA87C6F134C9C3A /* Sources */,
+				AD5E4EF2F19448D1AABBAAB7 /* Frameworks */,
+				E7269F623789292E1DBA1CE5 /* [CP] Embed Pods Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
 			name = FivebitWebRTC;
 			productName = FivebitWebRTC;
-			productReference = CCBFC28EB6BE41B6BF6A560D;
+			productReference = D6E4A9B6646C62FC48BAA6DD /* FivebitWebRTC.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		C98FA6CD6B984D7E8D7E1256 /* Project object */ = {
+		7F1413C2DE993725A3F30EC0 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1630;
 				LastUpgradeCheck = 1630;
 			};
-			buildConfigurationList = 411BACBDA4AB476EB3EC0BE8 /* Build configuration list for PBXProject */;
+			buildConfigurationList = 4623F89214148A3820E2F59A /* Build configuration list for PBXProject "FivebitWebRTC" */;
 			compatibilityVersion = "Xcode 14.0";
-			mainGroup = 95355738CF214A22B2B865F3;
-			productRefGroup = 1BEFBD3157BA437E92CDE897;
+			mainGroup = 7882D14E196057770B59E53D;
+			productRefGroup = 36303EABBFC709923008105E /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (FEA4F5E019A142F08DF0F4C4);
+			targets = (
+				42AEFBAE01D2DFD981F7DA7D /* FivebitWebRTC */,
+			);
 		};
 /* End PBXProject section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		1602FBCAA31C98979CF3F954 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-FivebitWebRTC-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		E7269F623789292E1DBA1CE5 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-FivebitWebRTC/Pods-FivebitWebRTC-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-FivebitWebRTC/Pods-FivebitWebRTC-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-FivebitWebRTC/Pods-FivebitWebRTC-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
-		9D303DA920744BD086F87FE4 /* Sources */ = {isa = PBXSourcesBuildPhase; files = (C5A1E0CEBD36415296E854E7, 3B059DA6A93845FDA662F8CC, 0E36557B9CE54EFC85CC3C5A, 03AA13854E1748C79E703EAA); };
+		7D5580843CA87C6F134C9C3A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				88E308CACAA941F7BE1ADD50 /* FivebitWebRTCApp.swift in Sources */,
+				09EAEA30E60526719767DB30 /* CallView.swift in Sources */,
+				926D7DDAB66D004BC714E5C5 /* SignalingClient.swift in Sources */,
+				7E09001B221AD05DE4398EED /* WebRTCClient.swift in Sources */,
+			);
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		716249890BF44A17B3C17EA3 /* Debug */ = {
+		7BF40F069D95C38DE60AA602 /* Release */ = {
 			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		B203CF6CCDF1B4187223717C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 599F2B2405EA9762F3AD70A6 /* Pods-FivebitWebRTC.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
@@ -73,7 +198,10 @@
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.humansales.fivebit.webrtc;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -83,8 +211,9 @@
 			};
 			name = Debug;
 		};
-		9EBDD338319C4F229F89F680 /* Release */ = {
+		E1DD700A34430B17B92E5974 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 3D12A54C07F9B703E086CCD0 /* Pods-FivebitWebRTC.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
@@ -92,7 +221,10 @@
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.humansales.fivebit.webrtc;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -102,14 +234,34 @@
 			};
 			name = Release;
 		};
-		15BD7893137D4D078D924089 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {}; name = Debug; };
-		64BB5318F9F448FBA8CE56E0 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {}; name = Release; };
+		EC86DC4F4B4C60C3EC031655 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		8BD81938DAE74DC18834B916 = {isa = XCConfigurationList; buildConfigurations = (716249890BF44A17B3C17EA3, 9EBDD338319C4F229F89F680); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		2696E4864F534BA08F86ED9C = {isa = XCConfigurationList; buildConfigurations = (4601F982D84F46988A7E2E0B, BF842899CB5A4851ACA46B02); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		4623F89214148A3820E2F59A /* Build configuration list for PBXProject "FivebitWebRTC" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EC86DC4F4B4C60C3EC031655 /* Debug */,
+				7BF40F069D95C38DE60AA602 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		DDC96F7C1D62EA89141E06E0 /* Build configuration list for PBXNativeTarget "FivebitWebRTC" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B203CF6CCDF1B4187223717C /* Debug */,
+				E1DD700A34430B17B92E5974 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 	};
-	rootObject = C98FA6CD6B984D7E8D7E1256 /* Project object */;
+	rootObject = 7F1413C2DE993725A3F30EC0 /* Project object */;
 }
