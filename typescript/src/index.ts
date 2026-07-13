@@ -83,3 +83,22 @@ export { Transaction, TransactionalGrid } from './transactions';
 
 export { ChangeStream } from './changestream';
 export type { ChangeEvent } from './changestream';
+
+export {
+  Machine,
+  program,
+  num,
+  verb,
+  region,
+  CMD_DEF,
+  CMD_CALL,
+  CMD_RET,
+  CMD_IF,
+  CMD_LOOP,
+  CMD_BREAK,
+  CMD_STORE,
+  CMD_READ,
+  InterpreterError,
+  OutOfGas,
+} from './interpreter';
+export type { GridLike } from './interpreter';
