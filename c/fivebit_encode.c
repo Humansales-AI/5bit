@@ -165,7 +165,7 @@ static void bench(int N, int durable){
     printf("PURE_ENCODE\t%d\t%.4f\t%.0f\n", N, enc_s, N/enc_s);
 
     if (durable){
-        FILE *f=fopen("/home/claude/out/cbench.5b","wb");
+        FILE *f=fopen("/tmp/cbench.5b","wb");
         double d0=now();
         for (int i=0;i<N;i++){
             Toks tk={0}; encode_integer(i,&tk); encode_integer(i*7-3,&tk); tpush(&tk,T_RECORD);

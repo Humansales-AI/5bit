@@ -14,7 +14,7 @@ A novel database architecture built entirely upon 5-bit binary tokens:
   - Hamming distance (address proximity) and Manhattan distance (value proximity) queries
   - 5-bit ↔ 8-bit serialization
 
-Author: Claude (based on user specification)
+Author: George Ikanos
 Date: 2026-06-21
 """
 
@@ -1458,7 +1458,7 @@ if __name__ == '__main__':
 
     # Example 2: Encoding words
     print("\n── Example 2: Word Encoding ──")
-    for word in ["HI", "HELLO", "CLAUDE"]:
+    for word in ["HI", "HELLO", "FABRIC"]:
         tokens = Encoder.encode_word(word)
         bs = token_stream_to_binary_string(tokens)
         print(f"  {word:>6} → {bs}")
