@@ -12,7 +12,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <errno.h>
-#include <openssl/sha.h>  /* SHA-256 */
+#include <CommonCrypto/CommonDigest.h>  /* CC_SHA256 */
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Internal helpers
@@ -181,6 +181,7 @@ int64_t grid_write(const char *data_dir, int record_id,
   /* Append to data.grid */
   int dfd = open(dp, O_RDWR);
   if (dfd < 0) { free(dp); free(ap); return -1; }
+  lseek(dfd, data_end, SEEK_SET);
   _write_all(dfd, packed_bytes, byte_len);
   fsync(dfd); close(dfd);
 
@@ -411,7 +412,7 @@ int wal_append(const char *data_dir, int tick_id,
 
   /* SHA-256 over header + payload (excluding the hash tail) */
   int body_len = WAL_ENTRY_HDR + payload_len;
-  SHA256(entry, body_len, entry + body_len);
+  CC_SHA256(entry, body_len, entry + body_len);
 
   /* Copy output hash */
   if (out_hash) memcpy(out_hash, entry + body_len, SHA256_LEN);
@@ -456,7 +457,7 @@ int wal_replay(const char *data_dir) {
 
     /* Verify SHA-256 */
     uint8_t computed[SHA256_LEN];
-    SHA256(data + off, body_len, computed);
+    CC_SHA256(data + off, body_len, computed);
     if (memcmp(computed, data + off + body_len, SHA256_LEN) != 0) {
       /* corruption — stop replay */
       break;
