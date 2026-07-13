@@ -64,7 +64,9 @@ static int srv_unpack(const uint8_t *data, int nbytes, int pad, uint8_t *tk, int
 static int encode_task(const char *task, int done, long long created,
                        uint8_t *out, int *pad_out) {
   uint8_t tk[1024]; int n = 0;
-  n += enc_word(task, tk + n, 1024 - n);
+  int w = enc_word(task, tk + n, 1024 - n);
+  if (w < 0) return -1;  /* unsupported character in task text */
+  n += w;
   n += enc_int(done ? 1 : 0, tk + n, 1024 - n);
   n += enc_int(created, tk + n, 1024 - n);
   tk[n++] = TK_RECORD;
@@ -74,58 +76,67 @@ static int encode_task(const char *task, int done, long long created,
 static int decode_task(const uint8_t *data, int nbytes, int pad,
                        char **task_buf, int *done, long long *created) {
   uint8_t tk[4096]; int ntok = srv_unpack(data, nbytes, pad, tk, 4096);
-  /* Parse: collect WORD text and NUM values in order.
-   * Convention: last two numbers = (done, created). All others = part of text. */
-  char words[4096] = {0}; int wpos = 0;
-  long long nums[256]; int numc = 0;
-  char cur_word[256]; int cw = 0;
+
+  static const char *CTX[4] = {
+    "0123456789??????789??????",                          /* depth 0: NUM     */
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ .",                       /* depth 1: WORD    */
+    "abcdefghijklmnopqrstuvwxyz@-",                       /* depth 2: SPECIAL */
+    "!\"#$%&'()*+,/:;<=>?[\\]^_`{|}",                     /* depth 3: SPECIAL2 */
+  };
+
+  /* Build text stream with all chars interleaved. Mark positions where
+   * depth-0 END fires (each marks the end of a digit group). */
+  char text[4096]; int tpos = 0;
   int depth = 0;
+  int num_ends[256]; int ne = 0;  /* text positions after each depth-0 END */
+  int prev_tpos = -1;
 
   for (int i = 0; i < ntok; i++) {
     int t = tk[i];
     if (t == TK_START) { depth++; continue; }
     if (t == TK_END) {
-      if (depth == 0 && cw > 0) {
-        /* digit accumulator at NUM level → parse to number */
-        long long v = 0; int neg = 0, j = 0;
-        if (cur_word[0] == '-') { neg = 1; j = 1; }
-        for (; j < cw; j++) v = v * 10 + (cur_word[j] - '0');
-        nums[numc++] = neg ? -v : v; cw = 0;
-      } else { if (depth > 0) depth--; }
+      if (depth == 0) {
+        if (tpos > prev_tpos) { num_ends[ne++] = tpos; prev_tpos = tpos; }
+      } else {
+        depth--;
+        /* WORD→NUM transition: depth just became 0 — record word boundary */
+        if (depth == 0 && tpos > prev_tpos) { num_ends[ne++] = tpos; prev_tpos = tpos; }
+      }
       continue;
     }
     if (t == TK_RECORD) break;
-    if (depth == 0) {
-      /* NUM context: digit token */
-      if (t <= 9) { cur_word[cw++] = (char)('0' + t); if (cw >= 255) cw = 254; }
-      else if (t >= 17 && t <= 25) {
-        cur_word[cw++] = '-'; cur_word[cw++] = (char)('0' + (t - 16));
-        if (cw >= 255) cw = 254;
-      }
-    } else {
-      /* WORD+ context: accumulate chars from token table */
-      if (t <= 9) words[wpos++] = (char)('A' + t);
-      else if (t >= 10 && t <= 16) words[wpos++] = (char)('K' + (t - 10));
-      else if (t >= 17 && t <= 25) words[wpos++] = (char)('R' + (t - 17));
-      else if (t == 26) words[wpos++] = ' ';
-      else if (t == 27) words[wpos++] = '.';
-      if (wpos >= 4095) wpos = 4094;
-    }
+    int d = depth > 3 ? 3 : depth;
+    if (depth == 0 && t >= 17 && t <= 25) text[tpos++] = '-'; /* negative sign */
+    if (t >= 0 && t <= 27 && CTX[d] && CTX[d][t])
+      text[tpos++] = CTX[d][t];
+    if (tpos >= 4095) tpos = 4094;
   }
-  words[wpos] = '\0';
+  text[tpos] = '\0';
 
-  /* Reconstruct text: words + non-metadata numbers */
-  char *out = malloc(4096); int opos = 0;
-  if (out) {
-    memcpy(out + opos, words, wpos); opos += wpos;
-    int meta_start = numc >= 2 ? numc - 2 : 0;
-    for (int i = 0; i < meta_start; i++)
-      opos += snprintf(out + opos, 4096 - opos, "%lld", nums[i]);
-    out[opos] = '\0';
+  /* The encode order is: enc_word(text) + enc_int(done) + enc_int(created) + RECORD.
+   * enc_word always ends with WORD→NUM END (plus possibly extra trailing ENDs).
+   * enc_int(done) ends with END. enc_int(created) ends with END.
+   * So num_ends[] = [text digit groups..., word_end, done_end, created_end].
+   * The last two entries are always the metadata boundaries.
+   * Truncate at num_ends[ne-3] (the word_end) to strip metadata digits. */
+  if (ne >= 3) {
+    /* num_ends[ne-3] = word boundary, [ne-2] = after done, [ne-1] = after created */
+    *done    = (text[num_ends[ne-3]] == '1');   /* single digit at word boundary */
+    *created = atoll(text + num_ends[ne-2]);     /* rest is created timestamp */
+    text[num_ends[ne-3]] = '\0';                 /* cut before done digit */
+  } else if (ne >= 2) {
+    *done    = (text[num_ends[ne-2]] == '1');
+    *created = atoll(text + num_ends[ne-1]);
+    text[num_ends[ne-2]] = '\0';
+  } else if (ne >= 1) {
+    *created = atoll(text);
+    *done = 0;
+    text[0] = '\0';
+  } else {
+    *done = 0; *created = 0;
   }
-  *task_buf = out;
-  *done = (numc >= 2) ? (nums[numc-2] == 1) : 0;
-  *created = (numc >= 2) ? nums[numc-1] : (numc >= 1 ? nums[0] : 0);
+
+  *task_buf = strdup(text);
   return ntok;
 }
 
@@ -312,7 +323,7 @@ static void handle(int fd, const char *data_dir) {
         if (rec) { free(rec->parsed); free(rec); } continue;
       }
       /* Unpack record bytes to token array for display */
-      int nbytes = (rec->bit_length + 7) / 8 + 1;
+      int nbytes = (rec->bit_length + 7) / 8;
       uint8_t tk[4096];
       int ntok = srv_unpack(rec->parsed, nbytes, 0, tk, 4096);
       if (ntok > 0) { memcpy(last_tokens, tk, ntok); last_ntok = ntok; }
@@ -368,6 +379,10 @@ static void handle(int fd, const char *data_dir) {
     long long now_ts = (long long)time(NULL);
     uint8_t packed[8192]; int pad;
     int plen = encode_task(task_text, 0, now_ts, packed, &pad);
+    if (plen < 0) {
+      http_400(fd, "task contains unsupported characters");
+      close(fd); return;
+    }
     int bit_len = plen * 8 - pad;
     grid_write(data_dir, rid, packed, plen, bit_len);
 
@@ -387,7 +402,7 @@ static void handle(int fd, const char *data_dir) {
     if (!rec || rec->is_tombstone) {
       http_404(fd); if (rec) { free(rec->parsed); free(rec); } close(fd); return;
     }
-    int nbytes = (rec->bit_length + 7) / 8 + 1;
+    int nbytes = (rec->bit_length + 7) / 8;
     char *task_text = NULL; int old_done; long long created;
     decode_task(rec->parsed, nbytes, 0, &task_text, &old_done, &created);
 
