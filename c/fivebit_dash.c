@@ -1,6 +1,6 @@
-/* fivebit_dash.c — 5bit Dash: SaaS Dashboard (C binary, zero deps)
- * ==================================================================
- * Projects + Tasks + Dashboard. One binary, dark-theme UI, zero npm.
+/* fivebit_dash.c — 5bit Dash (C binary, zero deps, LABEL-driven records)
+ * ========================================================================
+ * Projects + Tasks + Dashboard. Self-describing records via CMD_LABEL (§7).
  *
  * Build: cc -O2 -o fivebit_dash fivebit_dash.c fivebit_grid.c -lssl -lcrypto
  * Run:   ./fivebit_dash 8085 ./data
@@ -37,43 +37,126 @@ static const char *CTX[4]={
   "!\"#$%&'()*+,/:;<=>?[\\]^_`{|}",
 };
 
-/* ── Decode ──────────────────────────────────────────────────────────────── */
-typedef struct { char *text; int num_count; long long nums[32]; } Decoded;
-static Decoded decode(const uint8_t *data, int nbytes) {
-  Decoded d={0}; uint8_t tk[4096]; int ntok=srv_unpack(data,nbytes,0,tk,4096);
-  char text[4096]; int tpos=0,depth=0; char nb[64];int nbl=0,in_num=0;
-  for(int i=0;i<ntok;i++){int t=tk[i];
-    if(t==TK_START){depth++;continue;}
-    if(t==TK_END){if(depth==0){if(in_num){nb[nbl]=0;d.nums[d.num_count++]=atoll(nb);in_num=0;nbl=0;}}else{depth--;if(depth==0&&in_num){nb[nbl]=0;d.nums[d.num_count++]=atoll(nb);in_num=0;nbl=0;}}continue;}
-    if(t==TK_REC)break;int ctx=depth>3?3:depth;
-    if(depth==0){if(!in_num)in_num=1;if(t>=17&&t<=25){nb[nbl++]='-';text[tpos++]='-';}if(t>=0&&t<=27&&CTX[ctx][t]){nb[nbl++]=CTX[ctx][t];text[tpos++]=CTX[ctx][t];}}
-    else{if(t>=0&&t<=27&&CTX[ctx]&&CTX[ctx][t])text[tpos++]=CTX[ctx][t];}
-    if(tpos>=4095)tpos=4094;if(nbl>=63)nbl=62;
-  }text[tpos]=0;d.text=strdup(text);return d;
+/* ── LABEL encoding (§7) — START×4 D5 END×5 enc_word(name) END enc_int(pos) */
+static int enc_label(int pos, const char *name, uint8_t *tk, int cap) {
+  if (cap < 15) return -1;
+  int n = 0;
+  for (int i = 0; i < 4; i++) tk[n++] = TK_START;
+  tk[n++] = 5; /* CMD_LABEL = D5 */
+  for (int i = 0; i < 4; i++) tk[n++] = TK_END;
+  tk[n++] = TK_END;
+  int w = enc_word(name, tk + n, cap - n);
+  if (w < 0) return -1;
+  n += w;
+  tk[n++] = TK_END;
+  int ip = enc_int(pos, tk + n, cap - n);
+  if (ip < 0) return -1;
+  n += ip;
+  return n;
 }
 
-/* ── Record encode ───────────────────────────────────────────────────────── */
+/* ── Label-aware field extraction ─────────────────────────────────────────── */
+typedef struct { char name[64]; char value[512]; } LabeledField;
+
+static int decode_labeled(const uint8_t *data, int nbytes,
+                          LabeledField *fields, int max_fields) {
+  uint8_t tk[4096]; int ntok = srv_unpack(data, nbytes, 0, tk, 4096);
+  int fc = 0, depth = 0, i = 0;
+
+  while (i < ntok && fc < max_fields) {
+    /* Detect LABEL: START×4 + D5(5) */
+    if (i + 5 <= ntok && tk[i]==TK_START && tk[i+1]==TK_START &&
+        tk[i+2]==TK_START && tk[i+3]==TK_START && tk[i+4]==5) {
+      i += 5;
+      int ends = 0;
+      while (i < ntok && ends < 5 && tk[i]==TK_END) { i++; ends++; }
+      if (ends < 5) continue;
+
+      /* Read label name (WORD) */
+      char ln[128]; int lnp = 0; depth = 0;
+      while (i < ntok && lnp < 127) {
+        int t = tk[i];
+        if (t == TK_START) { depth++; i++; continue; }
+        if (t == TK_END) { if (depth == 0) break; depth--; i++; continue; }
+        int d = depth > 3 ? 3 : depth;
+        if (d >= 1 && t <= 27 && CTX[d] && CTX[d][t]) ln[lnp++] = CTX[d][t];
+        else if (depth == 0 && t <= 9) ln[lnp++] = (char)('0' + t);
+        i++;
+      }
+      ln[lnp] = '\0';
+      if (i < ntok && tk[i] == TK_END) i++; /* skip label END */
+
+      /* Skip position NUM (we use names, not positions) */
+      depth = 0;
+      while (i < ntok) {
+        int t = tk[i];
+        if (t == TK_START) { depth++; i++; continue; }
+        if (t == TK_END) { if (depth == 0) break; depth--; i++; continue; }
+        i++;
+      }
+      if (i < ntok && tk[i] == TK_END) i++;
+
+      /* Read value until next LABEL or RECORD */
+      char val[512]; int vl = 0; depth = 0;
+      while (i < ntok && vl < 511) {
+        int t = tk[i];
+        if (t == TK_REC) break;
+        if (i+5<=ntok && t==TK_START && tk[i+1]==TK_START &&
+            tk[i+2]==TK_START && tk[i+3]==TK_START && tk[i+4]==5) break;
+        if (t == TK_START) { depth++; i++; continue; }
+        if (t == TK_END) { if (depth>0) depth--; i++; continue; }
+        int d = depth > 3 ? 3 : depth;
+        if (depth > 0 && t <= 27 && CTX[d] && CTX[d][t]) val[vl++] = CTX[d][t];
+        else if (depth == 0 && t <= 9) val[vl++] = (char)('0' + t);
+        else if (depth == 0 && t >= 17 && t <= 25) {
+          val[vl++] = '-'; val[vl++] = (char)('0' + (t - 16));
+        }
+        i++;
+      }
+      val[vl] = '\0';
+      int nl = (int)strlen(ln); if (nl > 63) nl = 63;
+      memcpy(fields[fc].name, ln, nl); fields[fc].name[nl] = '\0';
+      memcpy(fields[fc].value, val, vl < 512 ? vl+1 : 512); fields[fc].value[511] = '\0';
+      fc++;
+    } else { i++; }
+  }
+  return fc;
+}
+
+static const char *fval(LabeledField *f, int fc, const char *name) {
+  for (int i = 0; i < fc; i++) if (strcmp(f[i].name, name) == 0) return f[i].value;
+  return "";
+}
+static long long fnum(LabeledField *f, int fc, const char *name) {
+  return atoll(fval(f, fc, name));
+}
+
+/* ── Record encode (LABEL-driven) ────────────────────────────────────────── */
+
 static int enc_proj(const char *name, const char *desc, const char *color,
                     uint8_t *out, int *pad) {
-  uint8_t tk[2048]; int n=0;
-  n+=enc_word(name,tk+n,2048-n);
-  n+=enc_word("|",tk+n,2048-n);
-  n+=enc_word(desc,tk+n,2048-n);
-  n+=enc_word("|",tk+n,2048-n);
-  n+=enc_word(color,tk+n,2048-n);
-  tk[n++]=TK_REC;
-  return srv_pack(tk,n,out,pad);
+  uint8_t tk[4096]; int n = 0;
+  n += enc_label(0, "name", tk+n, 4096-n);
+  n += enc_word(name, tk+n, 4096-n);
+  n += enc_label(1, "desc", tk+n, 4096-n);
+  n += enc_word(desc, tk+n, 4096-n);
+  n += enc_label(2, "color", tk+n, 4096-n);
+  n += enc_word(color, tk+n, 4096-n);
+  tk[n++] = TK_REC;
+  return srv_pack(tk, n, out, pad);
 }
+
 static int enc_task(const char *title, const char *status, long long proj_id,
                     uint8_t *out, int *pad) {
-  uint8_t tk[2048]; int n=0;
-  n+=enc_word(title,tk+n,2048-n);
-  n+=enc_word("|",tk+n,2048-n);
-  n+=enc_word(status,tk+n,2048-n);
-  n+=enc_word("|",tk+n,2048-n);
-  n+=enc_int(proj_id,tk+n,2048-n);
-  tk[n++]=TK_REC;
-  return srv_pack(tk,n,out,pad);
+  uint8_t tk[4096]; int n = 0;
+  n += enc_label(0, "title", tk+n, 4096-n);
+  n += enc_word(title, tk+n, 4096-n);
+  n += enc_label(1, "status", tk+n, 4096-n);
+  n += enc_word(status, tk+n, 4096-n);
+  n += enc_label(2, "project_id", tk+n, 4096-n);
+  n += enc_int(proj_id, tk+n, 4096-n);
+  tk[n++] = TK_REC;
+  return srv_pack(tk, n, out, pad);
 }
 
 /* ── HTTP ────────────────────────────────────────────────────────────────── */
@@ -83,16 +166,10 @@ static void e404(int fd){const char*r="HTTP/1.0 404\r\nContent-Length: 0\r\nConn
 static void e400(int fd,const char*m){char r[512];int l=snprintf(r,512,"HTTP/1.0 400\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s",(int)strlen(m),m);write(fd,r,l);}
 static int jesc(char*b,int pos,const char*s){b[pos++]='"';for(const char*p=s;*p;p++){if(*p=='"'||*p=='\\')b[pos++]='\\';b[pos++]=*p;}b[pos++]='"';return pos;}
 static int extr_str(char*body,const char*key,char*out,int cap){char s[64];snprintf(s,64,"\"%s\"",key);char*st=strstr(body,s);if(!st)return-1;st=strchr(st,':');if(!st)return-1;st++;while(*st==' '||*st=='"')st++;char*en=st;while(*en){if(*en=='\\'&&(en[1]=='"'||en[1]=='\\')){en+=2;continue;}if(*en=='"')break;en++;}if(!*en)return-1;int len=0;for(char*p=st;p<en&&len<cap-1;){if(*p=='\\'&&(p[1]=='"'||p[1]=='\\')){out[len++]=p[1];p+=2;}else out[len++]=*p++;}out[len]=0;return len;}
-
-static void split_pipe_cpy(char*dst,int cap,char*text,int idx){
-  char*p=text;for(int i=0;i<idx;i++){while(*p&&*p!='|')p++;if(*p)p++;}int len=0;
-  while(p[len]&&p[len]!='|'&&len<cap-1)len++;
-  memcpy(dst,p,len);dst[len]=0;}
-static long long split_pipe_num(char*text,int idx){char buf[64];split_pipe_cpy(buf,64,text,idx);return atoll(buf);}
 static int free_slot(const char*dir){int t=grid_total_entries(dir),rid=t;for(int i=0;i<t;i++){GridRecord*r=grid_read(dir,i);if(!r||r->is_tombstone){rid=i;if(r){free(r->parsed);free(r);}break;}if(r){free(r->parsed);free(r);}}return rid;}
 
 /* ═══════════════════════════════════════════════════════════════════════════
- * HTML UI — 5bit Dash
+ * HTML UI
  * ═══════════════════════════════════════════════════════════════════════════ */
 static const char *HTML =
 "<!DOCTYPE html><html lang=en><head><meta charset=UTF-8><meta name=viewport content='width=device-width,initial-scale=1.0'><title>5bit Dash</title><style>"
@@ -101,8 +178,6 @@ static const char *HTML =
 "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;overflow:hidden}"
 "@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}"
 "@keyframes slideIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}"
-"@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}"
-"@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}"
 ".sidebar{width:240px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:24px 0;flex-shrink:0;z-index:2}"
 ".logo{padding:0 24px 24px;display:flex;align-items:center;gap:10px}"
 ".logo-icon{width:32px;height:32px;background:linear-gradient(135deg,var(--accent),var(--pink));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#fff}"
@@ -112,7 +187,7 @@ static const char *HTML =
 ".nav-item:hover{color:var(--text);background:var(--card)}"
 ".nav-item.active{color:#fff;background:var(--card);border-left-color:var(--accent)}"
 ".nav-item .ico{font-size:15px;width:20px;text-align:center}"
-".nav-badge{ml:auto;background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:auto}"
+".nav-badge{background:var(--accent);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:auto}"
 ".main{flex:1;overflow-y:auto;padding:32px 40px}"
 ".topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:32px;animation:fadeIn .3s ease}"
 ".topbar h1{font-size:26px;font-weight:700;letter-spacing:-0.5px}"
@@ -153,8 +228,7 @@ static const char *HTML =
 ".modal label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;margin-top:16px;font-weight:600}"
 ".modal input,.modal select,.modal textarea{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;font-family:inherit;transition:border-color .15s;resize:vertical}"
 ".modal input:focus,.modal select:focus,.modal textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px #6c5ce720}"
-".modal select option{background:var(--surface);color:var(--text)}"
-".modal textarea{min-height:80px}"
+".modal select option{background:var(--surface);color:var(--text)}.modal textarea{min-height:80px}"
 ".modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:24px}"
 ".color-picker{display:flex;gap:8px;margin-top:8px}"
 ".color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:all .15s}"
@@ -189,7 +263,7 @@ static const char *HTML =
 "<div style='font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px'>Stack</div>"
 "<div style='font-size:11px;color:var(--muted)'>C binary + libc</div>"
 "<div style='font-size:11px;color:var(--muted)'>5bit AllocGrid</div>"
-"<div style='font-size:11px;color:var(--accent2)'>0 npm packages</div></div></div>"
+"<div style='font-size:11px;color:var(--accent2)'>LABEL-driven records (§7)</div></div></div>"
 "<div class=main id=main></div>"
 "<div class=modal-overlay id=modalOverlay><div class=modal id=modal></div></div>"
 "<div id=toastContainer></div>"
@@ -203,12 +277,10 @@ static const char *HTML =
 "  document.getElementById('projCount').textContent=projects.length;"
 "  document.getElementById('taskCount').textContent=tasks.length;"
 "  render();}"
-"function showTab(t){tab=t;document.querySelectorAll('.nav-item').forEach((el,i)=>{el.classList.toggle('active',i-1==['dashboard','projects','board'].indexOf(t));});render();}"
+"function showTab(t){tab=t;document.querySelectorAll('.nav-item').forEach((el,i)=>{el.classList.toggle('active',i==['dashboard','projects','board'].indexOf(t));});render();}"
 "function render(){let m=document.getElementById('main');"
 "if(tab==='dashboard'){"
-"  let todo=tasks.filter(t=>t.status==='To Do').length;"
-"  let prog=tasks.filter(t=>t.status==='In Progress').length;"
-"  let done=tasks.filter(t=>t.status==='Done').length;"
+"  let todo=tasks.filter(t=>t.status==='To Do').length,prog=tasks.filter(t=>t.status==='In Progress').length,done=tasks.filter(t=>t.status==='Done').length;"
 "  m.innerHTML="
 "'<div class=topbar><h1>📊 <span>Dashboard</span></h1><div style=font-size:12px;color:var(--muted)>'+new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+'</div></div>'+\n"
 "'<div class=stats-grid>'+\n"
@@ -231,8 +303,7 @@ static const char *HTML =
 "  m.innerHTML="
 "'<div class=topbar><h1>📋 <span>Board</span></h1><div style=display:flex;gap:8px><select id=boardProj onchange=renderBoard()><option value=all>All Projects</option>'+projects.map(p=>'<option value='+p._id+'>'+esc(p.name)+'</option>').join('')+'</select><button class=\"btn btn-primary\" onclick=showTaskModal()>+ Add Task</button></div></div>'+\n"
 "'<div class=board-cols>'+statuses.map(s=>'<div class=board-col><h4>'+s+' <span class=cnt>'+tasks.filter(t=>{let bp=document.getElementById(\"boardProj\");return t.status===s&&(!bp||bp.value===\"all\"||t.project_id===parseInt(bp.value));}).length+'</span></h4><div id=col-'+s.replace(/ /g,'')+'></div></div>').join('')+'</div>';"
-"  renderBoard();"
-"}"
+"  renderBoard();}"
 "}"
 "function renderBoard(){if(tab!=='board')return;let bp=document.getElementById('boardProj');let pid=bp?bp.value:'all';['ToDo','InProgress','Review','Done'].forEach(s=>{let status=s.replace(/([A-Z])/g,' $1').trim();let col=document.getElementById('col-'+status.replace(/ /g,''));if(!col)return;let filtered=tasks.filter(t=>t.status===status&&(pid==='all'||t.project_id===parseInt(pid)));if(filtered.length===0){col.innerHTML='<div style=text-align:center;color:var(--muted);padding:20px;font-size:12px>Drop tasks here</div>';return;}col.innerHTML=filtered.map(t=>{let p=projects.find(x=>x._id===t.project_id);return'<div class=task-card draggable=true data-id='+t._id+'><div class=t-title>'+esc(t.title)+'</div><div class=t-meta>'+(p?esc(p.name):'')+'</div><div class=t-actions><select onchange=moveTask('+t._id+',this.value) style=background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:3px 8px;font-size:10px;outline:none><option value=\"\">Move</option><option>To Do</option><option>In Progress</option><option>Review</option><option>Done</option></select><button class=\"btn btn-danger btn-sm\" onclick=deleteTask('+t._id+')>×</button></div></div>';}).join('');});}"
 "function showProjModal(){"
@@ -274,17 +345,21 @@ static void handle(int fd, const char *base) {
 
   if(strcmp(method,"GET")==0&&strcmp(dec,"/")==0){ok(fd,"text/html; charset=utf-8",HTML,(int)strlen(HTML));close(fd);return;}
 
-  /* ── PROJECTS ─────────────────────────────────────────────────────────── */
+  /* ── PROJECTS (labeled) ───────────────────────────────────────────────── */
   if(strcmp(method,"GET")==0&&strcmp(dec,"/api/projects")==0){
     char json[65536];int pos=snprintf(json,65536,"{\"projects\":[");int first=1;
     for(int i=0;i<grid_total_entries(pdir);i++){GridRecord*r=grid_read(pdir,i);if(!r||r->is_tombstone){if(r){free(r->parsed);free(r);}continue;}
-      Decoded d=decode(r->parsed,(r->bit_length+7)/8);
-      char nm[256],dc[512],cl[32];
-      split_pipe_cpy(nm,256,d.text,0);split_pipe_cpy(dc,512,d.text,1);split_pipe_cpy(cl,32,d.text,2);
-      if(strlen(nm)>0){if(!first)json[pos++]=',';pos+=snprintf(json+pos,65536-pos,"{\"_id\":%d,\"name\":",r->record_id);pos=jesc(json,pos,nm);
-        pos+=snprintf(json+pos,65536-pos,",\"desc\":");pos=jesc(json,pos,dc);
-        pos+=snprintf(json+pos,65536-pos,",\"color\":");pos=jesc(json,pos,cl[0]?cl:"#6c5ce7");pos+=snprintf(json+pos,65536-pos,"}");first=0;}
-      free(d.text);free(r->parsed);free(r);}
+      LabeledField f[8]; int fc = decode_labeled(r->parsed, (r->bit_length+7)/8, f, 8);
+      const char *nm = fval(f, fc, "name");
+      if (strlen(nm) > 0) {
+        if (!first) json[pos++]=',';
+        pos+=snprintf(json+pos,65536-pos,"{\"_id\":%d,\"name\":",r->record_id); pos=jesc(json,pos,nm);
+        pos+=snprintf(json+pos,65536-pos,",\"desc\":"); pos=jesc(json,pos,fval(f,fc,"desc"));
+        pos+=snprintf(json+pos,65536-pos,",\"color\":"); pos=jesc(json,pos,fval(f,fc,"color"));
+        pos+=snprintf(json+pos,65536-pos,"}"); first=0;
+      }
+      free(r->parsed); free(r);
+    }
     pos+=snprintf(json+pos,65536-pos,"]}");ok(fd,"application/json",json,pos);close(fd);return;}
 
   if(strcmp(method,"POST")==0&&strcmp(dec,"/api/projects")==0){
@@ -299,18 +374,20 @@ static void handle(int fd, const char *base) {
   if(strcmp(method,"DELETE")==0&&strncmp(dec,"/api/projects/",14)==0){int rid=atoi(dec+14);grid_delete(pdir,rid);
     char j[64];int p=snprintf(j,64,"{\"deleted\":%d}",rid);ok(fd,"application/json",j,p);close(fd);return;}
 
-  /* ── TASKS ────────────────────────────────────────────────────────────── */
+  /* ── TASKS (labeled) ──────────────────────────────────────────────────── */
   if(strcmp(method,"GET")==0&&strcmp(dec,"/api/tasks")==0){
     char json[65536];int pos=snprintf(json,65536,"{\"tasks\":[");int first=1;
     for(int i=0;i<grid_total_entries(tdir);i++){GridRecord*r=grid_read(tdir,i);if(!r||r->is_tombstone){if(r){free(r->parsed);free(r);}continue;}
-      Decoded d=decode(r->parsed,(r->bit_length+7)/8);
-      char tt[256],st[32];
-      split_pipe_cpy(tt,256,d.text,0);split_pipe_cpy(st,32,d.text,1);
-      long long pid=split_pipe_num(d.text,2);
-      if(strlen(tt)>0){if(!first)json[pos++]=',';pos+=snprintf(json+pos,65536-pos,"{\"_id\":%d,\"title\":",r->record_id);pos=jesc(json,pos,tt);
-        pos+=snprintf(json+pos,65536-pos,",\"status\":");pos=jesc(json,pos,st[0]?st:"To Do");
-        pos+=snprintf(json+pos,65536-pos,",\"project_id\":%lld}",pid);first=0;}
-      free(d.text);free(r->parsed);free(r);}
+      LabeledField f[8]; int fc = decode_labeled(r->parsed, (r->bit_length+7)/8, f, 8);
+      const char *tt = fval(f, fc, "title");
+      if (strlen(tt) > 0) {
+        if (!first) json[pos++]=',';
+        pos+=snprintf(json+pos,65536-pos,"{\"_id\":%d,\"title\":",r->record_id); pos=jesc(json,pos,tt);
+        pos+=snprintf(json+pos,65536-pos,",\"status\":"); pos=jesc(json,pos,fval(f,fc,"status"));
+        pos+=snprintf(json+pos,65536-pos,",\"project_id\":%lld}",fnum(f,fc,"project_id")); first=0;
+      }
+      free(r->parsed); free(r);
+    }
     pos+=snprintf(json+pos,65536-pos,"]}");ok(fd,"application/json",json,pos);close(fd);return;}
 
   if(strcmp(method,"POST")==0&&strcmp(dec,"/api/tasks")==0){
@@ -322,20 +399,18 @@ static void handle(int fd, const char *base) {
     int pl=enc_task(tt,st,pid,pk,&pad);if(pl<0){e400(fd,"encode error");close(fd);return;}
     grid_write(tdir,rid,pk,pl,pl*8-pad);
     char j[4096];int p=snprintf(j,4096,"{\"_id\":%d,\"title\":",rid);p=jesc(j,p,tt);
-    p+=snprintf(j+p,4096-p,",\"status\":");p=jesc(j,p,st);
-    p+=snprintf(j+p,4096-p,",\"project_id\":%lld}",pid);created(fd,j,p);close(fd);return;}
+    p+=snprintf(j+p,4096-p,",\"status\":");p=jesc(j,p,st);p+=snprintf(j+p,4096-p,",\"project_id\":%lld}",pid);created(fd,j,p);close(fd);return;}
 
   if(strcmp(method,"PATCH")==0&&strncmp(dec,"/api/tasks/",11)==0){
     int rid=atoi(dec+11);char st[32]={0};extr_str(body,"status",st,32);
     if(!st[0]){e400(fd,"status required");close(fd);return;}
     GridRecord*r=grid_read(tdir,rid);if(!r||r->is_tombstone){e404(fd);if(r){free(r->parsed);free(r);}close(fd);return;}
-    Decoded d=decode(r->parsed,(r->bit_length+7)/8);
-    char tt[256];split_pipe_cpy(tt,256,d.text,0);
-    long long pid=split_pipe_num(d.text,2);
+    LabeledField f[8]; int fc = decode_labeled(r->parsed, (r->bit_length+7)/8, f, 8);
+    const char *tt = fval(f, fc, "title"); long long pid = fnum(f, fc, "project_id");
     uint8_t pk[4096];int pad;int pl=enc_task(tt,st,pid,pk,&pad);
     grid_write(tdir,rid,pk,pl,pl*8-pad);
     char j[4096];int p=snprintf(j,4096,"{\"_id\":%d,\"title\":",rid);p=jesc(j,p,tt);p+=snprintf(j+p,4096-p,",\"status\":");p=jesc(j,p,st);p+=snprintf(j+p,4096-p,",\"project_id\":%lld}",pid);
-    ok(fd,"application/json",j,p);free(d.text);free(r->parsed);free(r);close(fd);return;}
+    ok(fd,"application/json",j,p);free(r->parsed);free(r);close(fd);return;}
 
   if(strcmp(method,"DELETE")==0&&strncmp(dec,"/api/tasks/",11)==0){int rid=atoi(dec+11);grid_delete(tdir,rid);
     char j[64];int p=snprintf(j,64,"{\"deleted\":%d}",rid);ok(fd,"application/json",j,p);close(fd);return;}
@@ -354,7 +429,7 @@ int main(int argc, char **argv) {
   struct sockaddr_in a={0};a.sin_family=AF_INET;a.sin_addr.s_addr=INADDR_ANY;a.sin_port=htons((uint16_t)port);
   bind(s,(struct sockaddr*)&a,sizeof(a));listen(s,10);
   printf("┌──────────────────────────────────────────┐\n");
-  printf("│  5bit Dash — SaaS Dashboard               │\n");
+  printf("│  5bit Dash — LABEL-driven records (§7)    │\n");
   printf("│  Projects + Kanban Board + Analytics       │\n");
   printf("│  C binary + libc. 0 npm packages.          │\n");
   printf("└──────────────────────────────────────────┘\n");
