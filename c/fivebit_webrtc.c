@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 #ifdef __APPLE__
 #include <CommonCrypto/CommonDigest.h>
 #else
@@ -125,44 +126,51 @@ static int enc_signal_msg(const char *type, const char *room, const char *sdp,
   return pack_tokens(tk, n, out, pad);
 }
 
-/* ── Connected peer state ───────────────────────────────────────────────── */
+/* ── Connected peer state (shared across threads, mutex-protected) ──────── */
 #define MAX_PEERS 32
 typedef struct { int fd; char room[64]; char peer_id[64]; int alive; } Peer;
 static Peer peers[MAX_PEERS]; static int peer_count = 0;
+static pthread_mutex_t peer_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static int add_peer(int fd, const char *room, const char *peer_id) {
-  if (peer_count >= MAX_PEERS) return -1;
+  pthread_mutex_lock(&peer_lock);
+  if (peer_count >= MAX_PEERS) { pthread_mutex_unlock(&peer_lock); return -1; }
   peers[peer_count].fd = fd; peers[peer_count].alive = 1;
   snprintf(peers[peer_count].room, 64, "%s", room);
   snprintf(peers[peer_count].peer_id, 64, "%s", peer_id);
-  return peer_count++;
+  int idx = peer_count++;
+  pthread_mutex_unlock(&peer_lock);
+  return idx;
 }
 static void remove_peer(int fd) {
+  pthread_mutex_lock(&peer_lock);
   for (int i = 0; i < peer_count; i++)
-    if (peers[i].fd == fd) { peers[i].alive = 0; peers[i].fd = -1; return; }
-}
-static int find_peer_by_fd(int fd) {
-  for (int i = 0; i < peer_count; i++)
-    if (peers[i].fd == fd && peers[i].alive) return i;
-  return -1;
+    if (peers[i].fd == fd) { peers[i].alive = 0; peers[i].fd = -1; break; }
+  pthread_mutex_unlock(&peer_lock);
 }
 
 /* Broadcast a message to all peers in a room except sender */
 static void broadcast(const char *room, int sender_fd, const char *msg, int len) {
+  pthread_mutex_lock(&peer_lock);
   for (int i = 0; i < peer_count; i++) {
     if (peers[i].alive && peers[i].fd != sender_fd &&
         strcmp(peers[i].room, room) == 0) {
       ws_send(peers[i].fd, msg, len);
     }
   }
+  pthread_mutex_unlock(&peer_lock);
 }
 /* Send to a specific peer by id */
 static void send_to_peer(const char *peer_id, const char *msg, int len) {
+  pthread_mutex_lock(&peer_lock);
   for (int i = 0; i < peer_count; i++) {
     if (peers[i].alive && strcmp(peers[i].peer_id, peer_id) == 0) {
-      ws_send(peers[i].fd, msg, len); return;
+      ws_send(peers[i].fd, msg, len);
+      pthread_mutex_unlock(&peer_lock);
+      return;
     }
   }
+  pthread_mutex_unlock(&peer_lock);
 }
 
 /* ── HTTP helpers ────────────────────────────────────────────────────────── */
@@ -177,10 +185,14 @@ static void http_101(int fd, const char *accept_key) {
   write(fd, h, hl);
 }
 
-/* ── Handle a single connection ──────────────────────────────────────────── */
-static void handle(int fd, const char *data_dir) {
+/* ── Handle a single connection (thread entry point) ────────────────────── */
+static void *handle(void *arg) {
+  int fd = ((struct { int fd; const char *dir; } *)arg)->fd;
+  const char *data_dir = ((struct { int fd; const char *dir; } *)arg)->dir;
+  free(arg);
+
   char buf[8192]; int n = (int)read(fd, buf, sizeof(buf)-1);
-  if (n <= 0) { close(fd); return; }
+  if (n <= 0) { close(fd); return NULL; }
   buf[n] = '\0';
 
   /* WebSocket upgrade? */
@@ -189,8 +201,8 @@ static void handle(int fd, const char *data_dir) {
     /* Extract Sec-WebSocket-Key */
     char *key_start = strstr(buf, "Sec-WebSocket-Key:");
     if (!key_start) key_start = strstr(buf, "Sec-Websocket-Key:");
-    if (!key_start) { close(fd); return; }
-    key_start = strchr(key_start, ':'); if (!key_start) { close(fd); return; }
+    if (!key_start) { close(fd); return NULL; }
+    key_start = strchr(key_start, ':'); if (!key_start) { close(fd); return NULL; }
     key_start++; while (*key_start == ' ') key_start++;
     char *key_end = strchr(key_start, '\r');
     if (!key_end) key_end = strchr(key_start, '\n');
@@ -273,7 +285,7 @@ static void handle(int fd, const char *data_dir) {
       "{\"type\":\"peer-left\",\"peer_id\":\"%s\"}", peer_id);
     broadcast(room, -1, leave_msg, ll);
     close(fd);
-    return;
+    return NULL;
   }
 
   /* Non-WebSocket: serve status page */
@@ -314,12 +326,12 @@ int main(int argc, char **argv) {
     struct sockaddr_in c; socklen_t cl = sizeof(c);
     int cf = accept(s, (struct sockaddr*)&c, &cl);
     if (cf < 0) continue;
-    if (fork() == 0) {
-      close(s);           /* child doesn't need listener */
-      handle(cf, data_dir);
-      exit(0);
-    }
-    close(cf);            /* parent doesn't need client */
+    /* Thread per connection — peers array is shared (mutex-protected) */
+    struct { int fd; const char *dir; } *args = malloc(sizeof(*args));
+    args->fd = cf; args->dir = data_dir;
+    pthread_t tid;
+    pthread_create(&tid, NULL, (void*(*)(void*))handle, args);
+    pthread_detach(tid);
   }
   close(s); return 0;
 }
