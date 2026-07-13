@@ -19,6 +19,7 @@ final class SignalingClient: NSObject {
     let peerId: String
     weak var delegate: SignalingClientDelegate?
     private var isConnected = false
+    private var pingTimer: Timer?
 
     init(serverURL: URL, room: String, peerId: String = UUID().uuidString) {
         self.serverURL = serverURL
@@ -36,9 +37,15 @@ final class SignalingClient: NSObject {
         webSocket = session.webSocketTask(with: comps.url!)
         webSocket?.resume()
         receive()
+        // Keepalive ping every 15s to prevent Railway timeout
+        pingTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            self?.send(["type": "ping"])
+        }
     }
 
     func disconnect() {
+        pingTimer?.invalidate()
+        pingTimer = nil
         webSocket?.cancel(with: .normalClosure, reason: nil)
         isConnected = false
     }
