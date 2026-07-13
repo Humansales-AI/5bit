@@ -142,13 +142,15 @@ static int decode_task(const uint8_t *data, int nbytes, int pad,
 
 /* ── JSON builders (hand-rolled) ─────────────────────────────────────────── */
 
-static void json_str(char *b, int *pos, const char *s) {
-  (*pos) += snprintf(b + *pos, 65536 - *pos, "\"");
+/* Append an escaped JSON string value (with surrounding quotes). */
+static int json_escape(char *b, int pos, const char *s) {
+  b[pos++] = '"';
   for (const char *p = s; *p; p++) {
-    if (*p == '"' || *p == '\\') b[(*pos)++] = '\\';
-    b[(*pos)++] = *p;
+    if (*p == '"' || *p == '\\') b[pos++] = '\\';
+    b[pos++] = *p;
   }
-  (*pos) += snprintf(b + *pos, 65536 - *pos, "\"");
+  b[pos++] = '"';
+  return pos;
 }
 
 /* ── HTTP response helpers ───────────────────────────────────────────────── */
@@ -332,9 +334,9 @@ static void handle(int fd, const char *data_dir) {
       decode_task(rec->parsed, nbytes, 0, &task_text, &done, &created);
       if (task_text && strlen(task_text) > 0) {
         if (!first) json[pos++] = ',';
-        pos += snprintf(json + pos, sizeof(json) - pos,
-          "{\"_id\":%d,\"task\":\"%s\",\"done\":%s,\"created\":%lld}",
-          rec->record_id, task_text, done ? "true" : "false", created);
+        pos += snprintf(json + pos, sizeof(json) - pos, "{\"_id\":%d,\"task\":", rec->record_id);
+        pos = json_escape(json, pos, task_text);
+        pos += snprintf(json + pos, sizeof(json) - pos, ",\"done\":%s,\"created\":%lld}", done ? "true" : "false", created);
         first = 0;
       }
       free(task_text);
@@ -363,10 +365,21 @@ static void handle(int fd, const char *data_dir) {
     if (!start) { http_400(fd, "missing task field"); close(fd); return; }
     start = strchr(start, ':'); if (!start) { http_400(fd, "malformed"); close(fd); return; }
     start++; while (*start == ' ' || *start == '"') start++;
-    char *end = strchr(start, '"');
-    if (!end) { http_400(fd, "unterminated"); close(fd); return; }
-    int tlen = (int)(end - start); if (tlen >= 4095) tlen = 4094;
-    char task_text[4096]; memcpy(task_text, start, tlen); task_text[tlen] = '\0';
+    /* Find closing quote, skipping \" and \\ escapes */
+    char *end = start;
+    while (*end) {
+      if (*end == '\\' && (end[1] == '"' || end[1] == '\\')) { end += 2; continue; }
+      if (*end == '"') break;
+      end++;
+    }
+    if (!*end) { http_400(fd, "unterminated"); close(fd); return; }
+    /* Unescape the JSON string into task_text */
+    int tlen = 0; char task_text[4096];
+    for (char *p = start; p < end && tlen < 4095; ) {
+      if (*p == '\\' && (p[1] == '"' || p[1] == '\\')) { task_text[tlen++] = p[1]; p += 2; }
+      else { task_text[tlen++] = *p++; }
+    }
+    task_text[tlen] = '\0';
 
     /* Find a free slot */
     int total = grid_total_entries(data_dir), rid = total;
@@ -387,8 +400,9 @@ static void handle(int fd, const char *data_dir) {
     grid_write(data_dir, rid, packed, plen, bit_len);
 
     char json[8192]; int pos = 0;
-    pos += snprintf(json + pos, sizeof(json) - pos,
-      "{\"_id\":%d,\"task\":\"%s\",\"done\":false}", rid, task_text);
+    pos += snprintf(json + pos, sizeof(json) - pos, "{\"_id\":%d,\"task\":", rid);
+    pos = json_escape(json, pos, task_text);
+    pos += snprintf(json + pos, sizeof(json) - pos, ",\"done\":false}");
     http_created(fd, json, pos);
     close(fd); return;
   }
@@ -411,9 +425,9 @@ static void handle(int fd, const char *data_dir) {
     grid_write(data_dir, rid, packed, plen, plen * 8 - pad);
 
     char json[8192]; int pos = 0;
-    pos += snprintf(json + pos, sizeof(json) - pos,
-      "{\"_id\":%d,\"task\":\"%s\",\"done\":%s}",
-      rid, task_text ? task_text : "", new_done ? "true" : "false");
+    pos += snprintf(json + pos, sizeof(json) - pos, "{\"_id\":%d,\"task\":", rid);
+    pos = json_escape(json, pos, task_text ? task_text : "");
+    pos += snprintf(json + pos, sizeof(json) - pos, ",\"done\":%s}", new_done ? "true" : "false");
     http_ok(fd, "application/json", json, pos);
     free(task_text); free(rec->parsed); free(rec);
     close(fd); return;
