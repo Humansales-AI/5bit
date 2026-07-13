@@ -15,6 +15,7 @@
 			dependencies = (
 			);
 			name = GoogleWebRTC;
+			productName = GoogleWebRTC;
 		};
 /* End PBXAggregateTarget section */
 
@@ -43,8 +44,8 @@
 		573863C01FE88831704D25063643E634 /* Pods-FivebitWebRTC.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-FivebitWebRTC.release.xcconfig"; sourceTree = "<group>"; };
 		577096762E3DE267E13CCFE025CBF8AC /* Pods-FivebitWebRTC-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "Pods-FivebitWebRTC-umbrella.h"; sourceTree = "<group>"; };
 		87AB0159F4A5F54D51111995C1D7D73B /* Pods-FivebitWebRTC-acknowledgements.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-FivebitWebRTC-acknowledgements.plist"; sourceTree = "<group>"; };
-		9D7D9E62041081B6FF01BBA357000653 /* Pods-FivebitWebRTC */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = "Pods-FivebitWebRTC"; path = Pods_FivebitWebRTC.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		9D940727FF8FB9C785EB98E56350EF41 /* Podfile */ = {isa = PBXFileReference; explicitFileType = text.script.ruby; includeInIndex = 1; indentWidth = 2; lastKnownFileType = text; name = Podfile; path = ../Podfile; sourceTree = SOURCE_ROOT; tabWidth = 2; xcLanguageSpecificationIdentifier = xcode.lang.ruby; };
+		9D7D9E62041081B6FF01BBA357000653 /* Pods_FivebitWebRTC.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_FivebitWebRTC.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		9D940727FF8FB9C785EB98E56350EF41 /* Podfile */ = {isa = PBXFileReference; explicitFileType = text.script.ruby; includeInIndex = 1; indentWidth = 2; name = Podfile; path = ../Podfile; sourceTree = SOURCE_ROOT; tabWidth = 2; xcLanguageSpecificationIdentifier = xcode.lang.ruby; };
 		A5AD8A7E616364C9461DF92674F08DE8 /* WebRTC.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebRTC.framework; path = Frameworks/frameworks/WebRTC.framework; sourceTree = "<group>"; };
 		B0CF677F4AC8E460F88FE6F463FCC0C3 /* Pods-FivebitWebRTC-frameworks.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "Pods-FivebitWebRTC-frameworks.sh"; sourceTree = "<group>"; };
 		CB9A69043F2521DF17924825F48CD3F0 /* GoogleWebRTC.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = GoogleWebRTC.release.xcconfig; sourceTree = "<group>"; };
@@ -100,7 +101,7 @@
 		6B7C0B11C7A9D16E5681C32640E02FC1 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				9D7D9E62041081B6FF01BBA357000653 /* Pods-FivebitWebRTC */,
+				9D7D9E62041081B6FF01BBA357000653 /* Pods_FivebitWebRTC.framework */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -148,7 +149,6 @@
 				63C3AED3B6589013CAF1D996598B7B62 /* Frameworks */,
 				BFEE84D1F3F0B859C6F5DEECF6D284F1 /* Support Files */,
 			);
-			name = GoogleWebRTC;
 			path = GoogleWebRTC;
 			sourceTree = "<group>";
 		};
@@ -190,7 +190,7 @@
 			);
 			name = "Pods-FivebitWebRTC";
 			productName = Pods_FivebitWebRTC;
-			productReference = 9D7D9E62041081B6FF01BBA357000653 /* Pods-FivebitWebRTC */;
+			productReference = 9D7D9E62041081B6FF01BBA357000653 /* Pods_FivebitWebRTC.framework */;
 			productType = "com.apple.product-type.framework";
 		};
 /* End PBXNativeTarget section */
@@ -211,8 +211,6 @@
 				en,
 			);
 			mainGroup = CF1408CF629C7361332E53B88F7BD30C;
-			minimizedProjectReferenceProxies = 0;
-			preferredProjectObjectVersion = 100;
 			productRefGroup = 6B7C0B11C7A9D16E5681C32640E02FC1 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -322,11 +320,10 @@
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
-				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 4L4254YDP6;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
@@ -363,11 +360,10 @@
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
-				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = 4L4254YDP6;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";

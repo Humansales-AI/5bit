@@ -40,7 +40,7 @@
 		0ECB2B966ECA6994910CAEE2 = {
 			isa = PBXGroup;
 			children = (
-				5DAE429688AF1C521AD87AC3 /*  */,
+				5DAE429688AF1C521AD87AC3,
 				235EC52392B77977539CF78B /* Products */,
 				DF6DF74382209DDA8FA6B589 /* Pods */,
 				A02A8FADBEAB52C8E4B82532 /* Frameworks */,
@@ -55,7 +55,7 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		5DAE429688AF1C521AD87AC3 /*  */ = {
+		5DAE429688AF1C521AD87AC3 = {
 			isa = PBXGroup;
 			children = (
 				2ABF3DE85EFEFE094405B32C /* FivebitWebRTCApp.swift */,
@@ -79,7 +79,6 @@
 				8D29A3062BAFB50B8269D8D7 /* Pods-FivebitWebRTC.debug.xcconfig */,
 				FABED8768B7170E36DE737D7 /* Pods-FivebitWebRTC.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -116,6 +115,12 @@
 			};
 			buildConfigurationList = 2CA666E9AB7FD185F98B8152 /* Build configuration list for PBXProject "FivebitWebRTC" */;
 			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
 			mainGroup = 0ECB2B966ECA6994910CAEE2;
 			productRefGroup = 235EC52392B77977539CF78B /* Products */;
 			projectDirPath = "";
@@ -135,9 +140,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-FivebitWebRTC/Pods-FivebitWebRTC-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-FivebitWebRTC/Pods-FivebitWebRTC-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -171,12 +180,14 @@
 /* Begin PBXSourcesBuildPhase section */
 		1952A01898073D1E561B9B4F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
 			files = (
 				20BE32740C8FCDA41102030B /* FivebitWebRTCApp.swift in Sources */,
 				72E4EE135BD613C6B1BE9E3D /* CallView.swift in Sources */,
 				EFFCAB6DE982AA5ADA20D5F3 /* SignalingClient.swift in Sources */,
 				0166707DABBE6E38CCCB650A /* WebRTCClient.swift in Sources */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
@@ -188,6 +199,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4L4254YDP6;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
@@ -223,6 +235,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4L4254YDP6;
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;

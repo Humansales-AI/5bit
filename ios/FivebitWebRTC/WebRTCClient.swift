@@ -23,6 +23,7 @@ final class WebRTCClient: NSObject {
     private let localVideoTrack: RTCVideoTrack
     private let localAudioTrack: RTCAudioTrack
     private var remoteVideoTrack: RTCVideoTrack?
+    private let videoCapturer: RTCCameraVideoCapturer
 
     weak var delegate: WebRTCClientDelegate?
 
@@ -35,6 +36,7 @@ final class WebRTCClient: NSObject {
         self.videoSource = factory.videoSource()
         self.localVideoTrack = factory.videoTrack(with: videoSource, trackId: "video0")
         self.localAudioTrack = factory.audioTrack(with: audioSource, trackId: "audio0")
+        self.videoCapturer = RTCCameraVideoCapturer(delegate: videoSource)
 
         let config = RTCConfiguration()
         config.iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
@@ -51,10 +53,29 @@ final class WebRTCClient: NSObject {
 
     func startCapture(videoView: RTCMTLVideoView) {
         localVideoTrack.add(videoView)
+
+        // Start front camera
+        guard let camera = RTCCameraVideoCapturer.captureDevices().first(where: { $0.position == .front })
+            ?? RTCCameraVideoCapturer.captureDevices().first else { return }
+
+        let format = RTCCameraVideoCapturer.supportedFormats(for: camera)
+            .sorted { f1, f2 in
+                let w1 = CMVideoFormatDescriptionGetDimensions(f1.formatDescription).width
+                let w2 = CMVideoFormatDescriptionGetDimensions(f2.formatDescription).width
+                return w1 < w2
+            }.last ?? nil
+
+        guard let format else { return }
+        let fps = max(30, format.videoSupportedFrameRateRanges.first?.maxFrameRate ?? 30)
+        videoCapturer.startCapture(with: camera, format: format, fps: Int(fps))
     }
 
     func renderRemoteVideo(to view: RTCMTLVideoView) {
         remoteVideoTrack?.add(view)
+    }
+
+    func stopCapture() {
+        videoCapturer.stopCapture()
     }
 
     func offer(completion: @escaping (_ sdp: RTCSessionDescription) -> Void) {

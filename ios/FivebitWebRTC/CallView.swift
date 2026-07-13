@@ -133,6 +133,7 @@ class CallManager: NSObject, ObservableObject {
     }
 
     func hangUp() {
+        rtc?.stopCapture()
         signaling?.disconnect()
         rtc?.disconnect()
         connectionState = "disconnected"
