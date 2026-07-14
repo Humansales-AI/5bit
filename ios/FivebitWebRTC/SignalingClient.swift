@@ -7,7 +7,7 @@ import Foundation
 protocol SignalingClientDelegate: AnyObject {
     func signalingClient(_ client: SignalingClient, didReceiveOffer sdp: String, from sender: String)
     func signalingClient(_ client: SignalingClient, didReceiveAnswer sdp: String, from sender: String)
-    func signalingClient(_ client: SignalingClient, didReceiveCandidate candidate: String, from sender: String)
+    func signalingClient(_ client: SignalingClient, didReceiveCandidate candidate: String, sdpMLineIndex: Int32, sdpMid: String?, from sender: String)
     func signalingClient(_ client: SignalingClient, peerJoined peerId: String)
     func signalingClient(_ client: SignalingClient, peerLeft peerId: String)
 }
@@ -81,7 +81,9 @@ final class SignalingClient: NSObject {
                 }
             case "ice-candidate", "candidate":
                 if let cand = json["candidate"] ?? json["candidate"] {
-                    self.delegate?.signalingClient(self, didReceiveCandidate: cand, from: json["sender"] ?? "unknown")
+                    let sdpMLineIndex = Int32(json["sdpMLineIndex"] ?? "0") ?? 0
+                    let sdpMid = json["sdpMid"]
+                    self.delegate?.signalingClient(self, didReceiveCandidate: cand, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid, from: json["sender"] ?? "unknown")
                 }
             case "peer-joined":
                 if let pid = json["peer_id"] {
@@ -104,8 +106,10 @@ final class SignalingClient: NSObject {
         send(["type": target != nil ? "target-answer" : "answer", "sdp": sdp, "sender": peerId])
     }
 
-    func sendCandidate(_ candidate: String) {
-        send(["type": "ice-candidate", "candidate": candidate, "sender": peerId])
+    func sendCandidate(_ sdp: String, sdpMLineIndex: Int32, sdpMid: String?) {
+        var dict: [String: String] = ["type": "ice-candidate", "candidate": sdp, "sender": peerId, "sdpMLineIndex": "\(sdpMLineIndex)"]
+        if let mid = sdpMid { dict["sdpMid"] = mid }
+        send(dict)
     }
 
     private func send(_ dict: [String: String]) {

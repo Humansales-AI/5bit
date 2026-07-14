@@ -162,11 +162,7 @@ extension CallManager: SignalingClientDelegate {
         rtc?.set(remoteSdp: RTCSessionDescription(type: .answer, sdp: sdp)) { _ in }
     }
 
-    func signalingClient(_ client: SignalingClient, didReceiveCandidate candidate: String, from sender: String) {
-        let parts = candidate.components(separatedBy: " ")
-        guard let sdpLineIndex = parts.firstIndex(of: "a=candidate:").map({Int(parts[$0+1])}) ?? Int(parts[1]),
-              let sdpMid = parts.firstIndex(of: "a=candidate:").map({parts[$0+2]}) ?? Optional(parts[2]) as? String else { return }
-        let sdpMLineIndex = Int32(sdpLineIndex ?? 0)
+    func signalingClient(_ client: SignalingClient, didReceiveCandidate candidate: String, sdpMLineIndex: Int32, sdpMid: String?, from sender: String) {
         let ice = RTCIceCandidate(sdp: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)
         rtc?.set(remoteCandidate: ice)
     }
@@ -182,7 +178,7 @@ extension CallManager: SignalingClientDelegate {
 
 extension CallManager: WebRTCClientDelegate {
     func webRTCClient(_ client: WebRTCClient, didGenerate candidate: RTCIceCandidate) {
-        signaling?.sendCandidate("\(candidate.sdp)")
+        signaling?.sendCandidate(candidate.sdp, sdpMLineIndex: candidate.sdpMLineIndex, sdpMid: candidate.sdpMid)
     }
 
     func webRTCClient(_ client: WebRTCClient, didCreateLocalSession sdp: RTCSessionDescription, isOffer: Bool) {
@@ -204,6 +200,7 @@ extension CallManager: WebRTCClientDelegate {
             }
         }
     }
+    func webRTCClient(_ client: WebRTCClient, didReceiveCandidate sdp: String, sdpMLineIndex: Int32, sdpMid: String?) {}
 }
 
 // MARK: - Helpers

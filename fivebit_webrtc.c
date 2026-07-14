@@ -18,7 +18,6 @@
 #include <sys/stat.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <pthread.h>
 #ifdef __APPLE__
 #include <CommonCrypto/CommonDigest.h>
 #else
@@ -126,51 +125,44 @@ static int enc_signal_msg(const char *type, const char *room, const char *sdp,
   return pack_tokens(tk, n, out, pad);
 }
 
-/* ── Connected peer state (shared across threads, mutex-protected) ──────── */
+/* ── Connected peer state ───────────────────────────────────────────────── */
 #define MAX_PEERS 32
 typedef struct { int fd; char room[64]; char peer_id[64]; int alive; } Peer;
 static Peer peers[MAX_PEERS]; static int peer_count = 0;
-static pthread_mutex_t peer_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static int add_peer(int fd, const char *room, const char *peer_id) {
-  pthread_mutex_lock(&peer_lock);
-  if (peer_count >= MAX_PEERS) { pthread_mutex_unlock(&peer_lock); return -1; }
+  if (peer_count >= MAX_PEERS) return -1;
   peers[peer_count].fd = fd; peers[peer_count].alive = 1;
   snprintf(peers[peer_count].room, 64, "%s", room);
   snprintf(peers[peer_count].peer_id, 64, "%s", peer_id);
-  int idx = peer_count++;
-  pthread_mutex_unlock(&peer_lock);
-  return idx;
+  return peer_count++;
 }
 static void remove_peer(int fd) {
-  pthread_mutex_lock(&peer_lock);
   for (int i = 0; i < peer_count; i++)
-    if (peers[i].fd == fd) { peers[i].alive = 0; peers[i].fd = -1; break; }
-  pthread_mutex_unlock(&peer_lock);
+    if (peers[i].fd == fd) { peers[i].alive = 0; peers[i].fd = -1; return; }
+}
+static int find_peer_by_fd(int fd) {
+  for (int i = 0; i < peer_count; i++)
+    if (peers[i].fd == fd && peers[i].alive) return i;
+  return -1;
 }
 
 /* Broadcast a message to all peers in a room except sender */
 static void broadcast(const char *room, int sender_fd, const char *msg, int len) {
-  pthread_mutex_lock(&peer_lock);
   for (int i = 0; i < peer_count; i++) {
     if (peers[i].alive && peers[i].fd != sender_fd &&
         strcmp(peers[i].room, room) == 0) {
       ws_send(peers[i].fd, msg, len);
     }
   }
-  pthread_mutex_unlock(&peer_lock);
 }
 /* Send to a specific peer by id */
 static void send_to_peer(const char *peer_id, const char *msg, int len) {
-  pthread_mutex_lock(&peer_lock);
   for (int i = 0; i < peer_count; i++) {
     if (peers[i].alive && strcmp(peers[i].peer_id, peer_id) == 0) {
-      ws_send(peers[i].fd, msg, len);
-      pthread_mutex_unlock(&peer_lock);
-      return;
+      ws_send(peers[i].fd, msg, len); return;
     }
   }
-  pthread_mutex_unlock(&peer_lock);
 }
 
 /* ── HTTP helpers ────────────────────────────────────────────────────────── */
@@ -185,14 +177,10 @@ static void http_101(int fd, const char *accept_key) {
   write(fd, h, hl);
 }
 
-/* ── Handle a single connection (thread entry point) ────────────────────── */
-static void *handle(void *arg) {
-  int fd = ((struct { int fd; const char *dir; } *)arg)->fd;
-  const char *data_dir = ((struct { int fd; const char *dir; } *)arg)->dir;
-  free(arg);
-
+/* ── Handle a single connection ──────────────────────────────────────────── */
+static void handle(int fd, const char *data_dir) {
   char buf[8192]; int n = (int)read(fd, buf, sizeof(buf)-1);
-  if (n <= 0) { close(fd); return NULL; }
+  if (n <= 0) { close(fd); return; }
   buf[n] = '\0';
 
   /* WebSocket upgrade? */
@@ -201,8 +189,8 @@ static void *handle(void *arg) {
     /* Extract Sec-WebSocket-Key */
     char *key_start = strstr(buf, "Sec-WebSocket-Key:");
     if (!key_start) key_start = strstr(buf, "Sec-Websocket-Key:");
-    if (!key_start) { close(fd); return NULL; }
-    key_start = strchr(key_start, ':'); if (!key_start) { close(fd); return NULL; }
+    if (!key_start) { close(fd); return; }
+    key_start = strchr(key_start, ':'); if (!key_start) { close(fd); return; }
     key_start++; while (*key_start == ' ') key_start++;
     char *key_end = strchr(key_start, '\r');
     if (!key_end) key_end = strchr(key_start, '\n');
@@ -240,22 +228,18 @@ static void *handle(void *arg) {
     char gdir[512]; snprintf(gdir, 512, "%s/signaling", data_dir);
     grid_write(gdir, grid_total_entries(gdir), pk, pl, pl*8-pad);
 
-    /* WebSocket message loop — heap buffers (stack too small for SDP on Alpine) */
-    char *msg = malloc(65536);
-    while (msg && (n = ws_read(fd, msg, 65535)) > 0) {
+    /* WebSocket message loop */
+    char msg[16384];
+    while ((n = ws_read(fd, msg, sizeof(msg)-1)) > 0) {
       msg[n] = '\0';
       char type[32] = {0}; json_get_str(msg, "type", type, 32);
 
       if (strcmp(type, "offer") == 0 || strcmp(type, "answer") == 0) {
-        char *sdp_buf = calloc(1, 65536);
-        char *fwd = malloc(65536);
-        if (sdp_buf && fwd) {
-          json_get_str(msg, "sdp", sdp_buf, 65536);
-          int fl = snprintf(fwd, 65536,
-            "{\"type\":\"%s\",\"sdp\":\"%s\",\"sender\":\"%s\"}", type, sdp_buf, peer_id);
-          broadcast(room, fd, fwd, fl);
-        }
-        free(sdp_buf); free(fwd);
+        char sdp_buf[8192] = {0}; json_get_str(msg, "sdp", sdp_buf, 8192);
+        /* Forward to all peers in room */
+        char fwd[16384]; int fl = snprintf(fwd, 16384,
+          "{\"type\":\"%s\",\"sdp\":\"%s\",\"sender\":\"%s\"}", type, sdp_buf, peer_id);
+        broadcast(room, fd, fwd, fl);
         /* Store in grid */
         uint8_t pk2[16384]; int pad2;
         int pl2 = enc_signal_msg(type, room, sdp_buf, "", peer_id, pk2, &pad2);
@@ -265,38 +249,31 @@ static void *handle(void *arg) {
       } else if (strcmp(type, "ice-candidate") == 0 || strcmp(type, "candidate") == 0) {
         char cand[4096] = {0}; json_get_str(msg, "candidate", cand, 4096);
         if (!cand[0]) json_get_str(msg, "candidate", cand, 4096);
-        char *fwd = malloc(65536);
-        if (fwd) {
-          int fl = snprintf(fwd, 65536, "{\"type\":\"ice-candidate\",\"candidate\":\"%s\",\"sender\":\"%s\"}", cand, peer_id);
-          broadcast(room, fd, fwd, fl);
-          free(fwd);
-        }
+        char fwd[8192]; int fl = snprintf(fwd, 8192,
+          "{\"type\":\"ice-candidate\",\"candidate\":\"%s\",\"sender\":\"%s\"}", cand, peer_id);
+        broadcast(room, fd, fwd, fl);
 
       } else if (strcmp(type, "target-offer") == 0 || strcmp(type, "target-answer") == 0) {
         char target[64] = {0}; json_get_str(msg, "target", target, 64);
-        char *sdp_buf = calloc(1, 65536);
-        char *fwd = malloc(65536);
-        if (sdp_buf && fwd) {
-          json_get_str(msg, "sdp", sdp_buf, 65536);
-          char t = (type[7] == 'o') ? 'o' : 'a';
-          int fl = snprintf(fwd, 65536, "{\"type\":\"%s\",\"sdp\":\"%s\",\"sender\":\"%s\"}", t == 'o' ? "offer" : "answer", sdp_buf, peer_id);
-          if (target[0]) send_to_peer(target, fwd, fl);
-          else broadcast(room, fd, fwd, fl);
-        }
-        free(sdp_buf); free(fwd);
+        char sdp_buf[8192] = {0}; json_get_str(msg, "sdp", sdp_buf, 8192);
+        char t = (type[7] == 'o') ? 'o' : 'a';
+        char fwd[16384]; int fl = snprintf(fwd, 16384,
+          "{\"type\":\"%s\",\"sdp\":\"%s\",\"sender\":\"%s\"}",
+          t == 'o' ? "offer" : "answer", sdp_buf, peer_id);
+        if (target[0]) send_to_peer(target, fwd, fl);
+        else broadcast(room, fd, fwd, fl);
 
       } else if (strcmp(type, "ping") == 0) {
         ws_send(fd, "{\"type\":\"pong\"}", 17);
       }
     }
     /* Peer left */
-    free(msg);
     remove_peer(fd);
     char leave_msg[512]; int ll = snprintf(leave_msg, 512,
       "{\"type\":\"peer-left\",\"peer_id\":\"%s\"}", peer_id);
     broadcast(room, -1, leave_msg, ll);
     close(fd);
-    return NULL;
+    return;
   }
 
   /* Non-WebSocket: serve status page */
@@ -337,12 +314,7 @@ int main(int argc, char **argv) {
     struct sockaddr_in c; socklen_t cl = sizeof(c);
     int cf = accept(s, (struct sockaddr*)&c, &cl);
     if (cf < 0) continue;
-    /* Thread per connection — peers array is shared (mutex-protected) */
-    struct { int fd; const char *dir; } *args = malloc(sizeof(*args));
-    args->fd = cf; args->dir = data_dir;
-    pthread_t tid;
-    pthread_create(&tid, NULL, (void*(*)(void*))handle, args);
-    pthread_detach(tid);
+    handle(cf, data_dir);
   }
   close(s); return 0;
 }

@@ -19,6 +19,8 @@ THE VERBS (SPECIAL3 free slots 6..13 — first spend of the 22-slot budget):
     STORE = 12   pop value, append it as the new version of slot N
                  — GATED BY OWNERSHIP: refuses mid-program without GRANT_W
     READ  = 13   push the current value of slot N
+    LOADX = 14   pop index; push slots[index]        — INDEXED read
+    STOREX= 15   pop index, pop value; slots[index]=v — INDEXED write (grant-gated)
 
 REGIONS (structured control flow, zero addresses):
     Branch/loop bodies are LPAREN ( ... ) RPAREN regions — the parens already
@@ -60,10 +62,12 @@ CMD_LOOP  = Token(10)
 CMD_BREAK = Token(11)
 CMD_STORE = Token(12)
 CMD_READ  = Token(13)
+CMD_LOADX = Token(18)   # pop index -> push slots[index]        (indexed read)
+CMD_STOREX= Token(19)   # pop index, pop value -> slots[index]  (indexed write, grant-checked)
 
 VERB_NAMES = {CMD_DEF: 'DEF', CMD_CALL: 'CALL', CMD_RET: 'RET', CMD_IF: 'IF',
               CMD_LOOP: 'LOOP', CMD_BREAK: 'BREAK', CMD_STORE: 'STORE',
-              CMD_READ: 'READ'}
+              CMD_READ: 'READ', CMD_LOADX: 'LOADX', CMD_STOREX: 'STOREX'}
 _HAS_ARG = {CMD_DEF, CMD_CALL, CMD_STORE, CMD_READ}
 
 LPAREN, RPAREN = Token(15), Token(16)
@@ -285,6 +289,27 @@ class Machine:
             self.own.write_with_grant(self.grid, arg, self.holder,
                                       [*Encoder.encode_integer(v), Token.RECORD])
             self.trace.append(f"STORE {v} -> slot {arg}")
+            return pos
+        if cmd == CMD_LOADX:                       # indexed read: slot from stack
+            idx = self.stack.pop()
+            if self.grid is None:
+                raise InterpreterError("LOADX with no grid attached")
+            rec = self.grid.read(idx)
+            if rec is None:
+                self.stack.append(0)               # unset slot reads as 0
+            else:
+                vals = self._parse_ints(rec.tokens)
+                self.stack.append(vals[0] if vals else 0)
+            self.trace.append(f"LOADX slot {idx}")
+            return pos
+        if cmd == CMD_STOREX:                      # indexed write: slot from stack
+            idx = self.stack.pop()
+            v = self.stack.pop()
+            if self.grid is None:
+                raise InterpreterError("STOREX with no grid attached")
+            self.own.write_with_grant(self.grid, idx, self.holder,
+                                      [*Encoder.encode_integer(v), Token.RECORD])
+            self.trace.append(f"STOREX {v} -> slot {idx}")
             return pos
         if cmd == CMD_READ:
             if self.grid is None:

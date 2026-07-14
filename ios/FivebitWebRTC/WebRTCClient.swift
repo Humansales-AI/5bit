@@ -9,6 +9,7 @@ protocol WebRTCClientDelegate: AnyObject {
     func webRTCClient(_ client: WebRTCClient, didCreateLocalSession sdp: RTCSessionDescription, isOffer: Bool)
     func webRTCClient(_ client: WebRTCClient, didReceiveRemoteVideo track: RTCVideoTrack)
     func webRTCClient(_ client: WebRTCClient, didChange state: RTCIceConnectionState)
+    func webRTCClient(_ client: WebRTCClient, didReceiveCandidate sdp: String, sdpMLineIndex: Int32, sdpMid: String?)
 }
 
 final class WebRTCClient: NSObject {
