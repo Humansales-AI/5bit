@@ -68,6 +68,17 @@ struct ActiveCallView: View {
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(hex: "2a2a3e"), lineWidth: 1))
                     .padding(.trailing, 16).frame(maxWidth: .infinity, alignment: .trailing).offset(y: -30)
 
+                if call.incomingOffer {
+                    VStack(spacing: 12) {
+                        Text("Incoming call from \(call.incomingCaller)").foregroundColor(.white).font(.system(size: 16, weight: .medium))
+                        Button(action: { call.acceptCall() }) {
+                            HStack { Image(systemName: "phone.fill"); Text("Accept") }
+                                .frame(width: 200).padding(14)
+                                .background(Color(hex: "00e676")).foregroundColor(.white).cornerRadius(12).fontWeight(.bold)
+                        }
+                    }.padding(.bottom, 20)
+                }
+
                 Spacer()
 
                 HStack(spacing: 40) {
@@ -106,13 +117,16 @@ class CallManager: NSObject, ObservableObject {
     @Published var connectionState = "disconnected"
     @Published var isMuted = false
     @Published var isVideoPaused = false
+    @Published var incomingOffer = false
+    @Published var incomingCaller = ""
 
     let localView = RTCMTLVideoView()
     let remoteView = RTCMTLVideoView()
 
     private var signaling: SignalingClient?
     private var rtc: WebRTCClient?
-    private var hasRemoteSDP = false
+    private var pendingSDP: String?
+    private var pendingSender: String?
 
     override init() {
         localView.videoContentMode = .scaleAspectFill
@@ -125,11 +139,10 @@ class CallManager: NSObject, ObservableObject {
         signaling = SignalingClient(serverURL: url, room: room)
         signaling?.delegate = self
         signaling?.connect()
-
         rtc = WebRTCClient()
         rtc?.delegate = self
         rtc?.startCapture(videoView: localView)
-        connectionState = "connecting"
+        connectionState = "waiting..."
     }
 
     func hangUp() {
@@ -137,32 +150,38 @@ class CallManager: NSObject, ObservableObject {
         signaling?.disconnect()
         rtc?.disconnect()
         connectionState = "disconnected"
+        incomingOffer = false
     }
 
     func toggleMute() { isMuted.toggle() }
 
+    func acceptCall() {
+        guard let sdp = pendingSDP, let sender = pendingSender else { return }
+        incomingOffer = false; connectionState = "connecting..."
+        rtc?.set(remoteSdp: RTCSessionDescription(type: .offer, sdp: sdp)) { [weak self] _ in
+            self?.rtc?.answer { [weak self] ans in
+                self?.signaling?.sendAnswer(ans.sdp, target: sender)
+            }
+        }
+    }
+
     func startCall() {
-        // Camera must be running before creating offer (ICE candidates need media)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
             self?.rtc?.offer { [weak self] sdp in
-                print("[5bit] OFFER created, sending...")
                 self?.signaling?.sendOffer(sdp.sdp)
             }
         }
     }
+
 }
 
 extension CallManager: SignalingClientDelegate {
     func signalingClient(_ client: SignalingClient, didReceiveOffer sdp: String, from sender: String) {
-        print("[5bit] 📥 RECEIVED OFFER from \(sender)")
-        guard let rtc = rtc else { return }
-        rtc.set(remoteSdp: RTCSessionDescription(type: .offer, sdp: sdp)) { _ in
-            print("[5bit] Remote SDP set, creating answer...")
-            rtc.answer { [weak self] ans in
-                print("[5bit] ANSWER created, sending to \(sender)")
-                self?.signaling?.sendAnswer(ans.sdp, target: sender)
-            }
-        }
+        print("[5bit] 📥 OFFER from \(sender)")
+        pendingSDP = sdp; pendingSender = sender
+        incomingCaller = sender.prefix(8) + "..."
+        incomingOffer = true
+        connectionState = "incoming call"
     }
 
     func signalingClient(_ client: SignalingClient, didReceiveAnswer sdp: String, from sender: String) {
@@ -179,9 +198,9 @@ extension CallManager: SignalingClientDelegate {
     }
 
     func signalingClient(_ client: SignalingClient, peerJoined peerId: String) {
-        print("[5bit] 👤 PEER JOINED: \(peerId) (I am \(client.peerId))")
+        print("[5bit] 👤 PEER: \(peerId)")
         if peerId != client.peerId {
-            connectionState = "HOST — sending offer"
+            connectionState = "guest joined — calling..."
             startCall()
         }
     }
