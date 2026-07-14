@@ -136,12 +136,12 @@ static uint8_t ROUTER_TOKS[] = {
   31,31,31,31, 6, 30,30,30,30,  30, 2,30,  /* DEF 2 */
   /* READ 0 */
   31,31,31,31, 13, 30,30,30,30,  30, 0,30,  /* READ 0 */
-  /* NUM 100 */
-  1,30, 0,30, 0,30,
+  /* NUM 100 — consecutive digits, one END */
+  1, 0, 0, 30,
   /* PLUS */
   10,
-  /* CALL 9003 (EMIT_OUT) — pushes to m->outbox[] */
-  31,31,31,31, 7, 30,30,30,30,  9,30, 0,30, 0,30, 3,30,  /* CALL 9003 = V_CALL + NUM 9003 */
+  /* CALL 9003 (EMIT_OUT) — NUM as consecutive digits, one terminating END */
+  31,31,31,31, 7, 30,30,30,30,  9, 0, 0, 3, 30,  /* CALL 9003 */
   /* RECORD */
   28
 };
@@ -273,9 +273,13 @@ static void *handle(void *arg) {
     "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", acc);
   write(fd, up, ul);
 
-  /* Register peer */
+  /* Register peer (reuse dead slots) */
   pthread_mutex_lock(&lock);
-  int pi = peer_count < MAX_PEERS ? peer_count++ : -1;
+  int pi = -1;
+  for (int i = 0; i < peer_count; i++) {
+    if (peers[i].fd == -1) { pi = i; break; }
+  }
+  if (pi < 0 && peer_count < MAX_PEERS) pi = peer_count++;
   if (pi >= 0) {
     peers[pi].fd = fd;
     snprintf(peers[pi].room, 64, "%s", room);
@@ -304,13 +308,14 @@ static void *handle(void *arg) {
     /* C extracts type code → feeds to 5bit ROUTER via slot 0 */
     int ty = parse_type_code(mb);
     fprintf(stderr, "[5bit] type=%d peer=%s room=%s\n", ty, peer_id, room);
-    m->slots[0] = ty;
+    m->slots[0] = ty; m->slot_set[0] = 1;
 
     /* Run the 5bit ROUTER */
     m->err[0] = '\0'; m->steps = 0; m->sp = 0; m->outn = 0; m->outbox_n = 0;
     fb_result r = fb_run(m, 2);
     int action = (r == FB_OK && m->outbox_n > 0) ? (int)m->outbox[0] : 0;
-    fprintf(stderr, "[5bit] ROUTER emitted action=%d via CALL 9003 peers=%d\n", action, peer_count);
+    fprintf(stderr, "[5bit] ROUTER r=%d out_n=%d box0=%lld action=%d ty=%d\n",
+            r, m->outbox_n, (long long)m->outbox[0], action, ty);
 
     /* C executes the 5bit decision: action codes 101-104 */
     if (action >= 101 && action <= 104) {
