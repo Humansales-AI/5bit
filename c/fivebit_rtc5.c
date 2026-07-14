@@ -130,18 +130,18 @@
  * FULL TOKENS for: DEF 2 · READ 0 · 100 PLUS · EMIT · RECORD
  */
 
-/* ROUTER (slot 2): reads type code from slot 0, emits type+100 */
+/* ROUTER (slot 2): reads type code from slot 0, calls CAP_EMIT_OUT(type+100) */
 static uint8_t ROUTER_TOKS[] = {
   /* DEF 2 */
-  31,31,31,31, 6, 30,30,30,30,  30, 2,30,  /* DEF 2 = START*4 V_DEF END*4 END NUM(2) END */
+  31,31,31,31, 6, 30,30,30,30,  30, 2,30,  /* DEF 2 */
   /* READ 0 */
   31,31,31,31, 13, 30,30,30,30,  30, 0,30,  /* READ 0 */
-  /* 100 */
+  /* NUM 100 */
   1,30, 0,30, 0,30,
   /* PLUS */
   10,
-  /* EMIT */
-  14,
+  /* CALL 9003 (EMIT_OUT) — pushes to m->outbox[] */
+  31,31,31,31, 7, 30,30,30,30,  9,30, 0,30, 0,30, 3,30,  /* CALL 9003 = V_CALL + NUM 9003 */
   /* RECORD */
   28
 };
@@ -294,6 +294,7 @@ static void *handle(void *arg) {
   fb_init(m);
   fb_load(m, 2, ROUTER_TOKS, ROUTER_NTOKS);
   for (int s = 0; s < 2048; s++) fb_grant_w(m, s, 0);
+  fb_grant_w(m, CAP_EMIT_OUT, 0); /* grant host capability for ROUTER's CALL 9003 */
 
   /* Message loop */
   char *mb = malloc(65536);
@@ -302,13 +303,14 @@ static void *handle(void *arg) {
 
     /* C extracts type code → feeds to 5bit ROUTER via slot 0 */
     int ty = parse_type_code(mb);
-    m->slots[0] = ty;   /* 5bit ROUTER reads this via READ 0 */
+    fprintf(stderr, "[5bit] type=%d peer=%s room=%s\n", ty, peer_id, room);
+    m->slots[0] = ty;
 
-    /* Run the 5bit ROUTER: type+100 → EMIT via CAP_EMIT_OUT (slot 9003) */
+    /* Run the 5bit ROUTER */
     m->err[0] = '\0'; m->steps = 0; m->sp = 0; m->outn = 0; m->outbox_n = 0;
     fb_result r = fb_run(m, 2);
-    /* 5bit emitted type+100 to outbox via CAP_EMIT_OUT → we execute */
-    int action = (r == FB_OK &&m->outbox_n > 0) ? (int)m->outbox[0] : 0;
+    int action = (r == FB_OK && m->outbox_n > 0) ? (int)m->outbox[0] : 0;
+    fprintf(stderr, "[5bit] ROUTER emitted action=%d via CALL 9003 peers=%d\n", action, peer_count);
 
     /* C executes the 5bit decision: action codes 101-104 */
     if (action >= 101 && action <= 104) {
@@ -327,6 +329,7 @@ static void *handle(void *arg) {
         } else {
           fl = snprintf(fwd, 65536, "{\"type\":\"pong\"}");
         }
+        fprintf(stderr, "[5bit] broadcasting type=%s to %d peers in room %s\n", type_str, peer_count-1, room);
         pthread_mutex_lock(&lock);
         for (int i = 0; i < peer_count; i++)
           if (peers[i].fd != fd && strcmp(peers[i].room, room) == 0)

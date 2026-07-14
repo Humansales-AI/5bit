@@ -38,7 +38,7 @@ final class SignalingClient: NSObject {
         webSocket?.resume()
         receive()
         // Keepalive ping every 15s to prevent Railway timeout
-        pingTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+        pingTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             self?.send(["type": "ping"])
         }
     }
