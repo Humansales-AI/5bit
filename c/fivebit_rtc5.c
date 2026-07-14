@@ -130,18 +130,20 @@
  * FULL TOKENS for: DEF 2 · READ 0 · 100 PLUS · EMIT · RECORD
  */
 
-/* ROUTER (slot 2): reads type code from slot 0, calls CAP_EMIT_OUT(type+100) */
+/* ROUTER (slot 2): reads type code from slot 0, calls CAP_EMIT_OUT(type+100)
+ * Verb layout per interpreter: START×4 cmd END×4 [digits... END]
+ * No leading END before digits — that's the NUM finalizer, not a prefix. */
 static uint8_t ROUTER_TOKS[] = {
-  /* DEF 2 */
-  31,31,31,31, 6, 30,30,30,30,  30, 2,30,  /* DEF 2 */
+  /* DEF 2 — verb header, slot arg (digits only, no leading END) */
+  31,31,31,31, 6, 30,30,30,30,  2,30,
   /* READ 0 */
-  31,31,31,31, 13, 30,30,30,30,  30, 0,30,  /* READ 0 */
-  /* NUM 100 — consecutive digits, one END */
+  31,31,31,31, 13, 30,30,30,30,  0,30,
+  /* NUM 100 */
   1, 0, 0, 30,
   /* PLUS */
   10,
-  /* CALL 9003 (EMIT_OUT) — NUM as consecutive digits, one terminating END */
-  31,31,31,31, 7, 30,30,30,30,  9, 0, 0, 3, 30,  /* CALL 9003 */
+  /* CALL 9003 */
+  31,31,31,31, 7, 30,30,30,30,  9, 0, 0, 3, 30,
   /* RECORD */
   28
 };
