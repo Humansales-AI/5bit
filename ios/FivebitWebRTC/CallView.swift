@@ -142,46 +142,64 @@ class CallManager: NSObject, ObservableObject {
     func toggleMute() { isMuted.toggle() }
 
     func startCall() {
-        rtc?.offer { [weak self] sdp in
-            self?.signaling?.sendOffer(sdp.sdp)
+        // Camera must be running before creating offer (ICE candidates need media)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.rtc?.offer { [weak self] sdp in
+                print("[5bit] OFFER created, sending...")
+                self?.signaling?.sendOffer(sdp.sdp)
+            }
         }
     }
 }
 
 extension CallManager: SignalingClientDelegate {
     func signalingClient(_ client: SignalingClient, didReceiveOffer sdp: String, from sender: String) {
+        print("[5bit] 📥 RECEIVED OFFER from \(sender)")
         guard let rtc = rtc else { return }
         rtc.set(remoteSdp: RTCSessionDescription(type: .offer, sdp: sdp)) { _ in
+            print("[5bit] Remote SDP set, creating answer...")
             rtc.answer { [weak self] ans in
+                print("[5bit] ANSWER created, sending to \(sender)")
                 self?.signaling?.sendAnswer(ans.sdp, target: sender)
             }
         }
     }
 
     func signalingClient(_ client: SignalingClient, didReceiveAnswer sdp: String, from sender: String) {
-        rtc?.set(remoteSdp: RTCSessionDescription(type: .answer, sdp: sdp)) { _ in }
+        print("[5bit] 📥 RECEIVED ANSWER from \(sender)")
+        rtc?.set(remoteSdp: RTCSessionDescription(type: .answer, sdp: sdp)) { _ in
+            print("[5bit] Remote answer SDP set")
+        }
     }
 
     func signalingClient(_ client: SignalingClient, didReceiveCandidate candidate: String, sdpMLineIndex: Int32, sdpMid: String?, from sender: String) {
+        print("[5bit] 📥 ICE from \(sender)")
         let ice = RTCIceCandidate(sdp: candidate, sdpMLineIndex: sdpMLineIndex, sdpMid: sdpMid)
         rtc?.set(remoteCandidate: ice)
     }
 
     func signalingClient(_ client: SignalingClient, peerJoined peerId: String) {
-        if peerId != client.peerId { connectionState = "peer joined"; startCall() }
+        print("[5bit] 👤 PEER JOINED: \(peerId) (I am \(client.peerId))")
+        if peerId != client.peerId {
+            connectionState = "HOST — sending offer"
+            startCall()
+        }
     }
 
     func signalingClient(_ client: SignalingClient, peerLeft peerId: String) {
+        print("[5bit] 👋 PEER LEFT: \(peerId)")
         connectionState = "peer left"
     }
 }
 
 extension CallManager: WebRTCClientDelegate {
     func webRTCClient(_ client: WebRTCClient, didGenerate candidate: RTCIceCandidate) {
+        print("[5bit] 🧊 ICE generated, sending...")
         signaling?.sendCandidate(candidate.sdp, sdpMLineIndex: candidate.sdpMLineIndex, sdpMid: candidate.sdpMid)
     }
 
     func webRTCClient(_ client: WebRTCClient, didCreateLocalSession sdp: RTCSessionDescription, isOffer: Bool) {
+        print("[5bit] 📤 Local SDP created, isOffer=\(isOffer)")
         if isOffer { signaling?.sendOffer(sdp.sdp) }
         else { signaling?.sendAnswer(sdp.sdp) }
     }
@@ -191,12 +209,14 @@ extension CallManager: WebRTCClientDelegate {
     }
 
     func webRTCClient(_ client: WebRTCClient, didChange state: RTCIceConnectionState) {
+        print("[5bit] ICE state: \(state.rawValue)")
         DispatchQueue.main.async {
             switch state {
-            case .connected: self.connectionState = "connected"
+            case .connected: self.connectionState = "CONNECTED ✅"
             case .disconnected: self.connectionState = "disconnected"
-            case .failed: self.connectionState = "failed"
-            default: self.connectionState = "\(state)"
+            case .failed: self.connectionState = "ICE FAILED"
+            case .checking: self.connectionState = "connecting..."
+            default: self.connectionState = "ICE:\(state.rawValue)"
             }
         }
     }

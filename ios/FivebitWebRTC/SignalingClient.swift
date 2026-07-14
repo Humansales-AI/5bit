@@ -20,11 +20,14 @@ final class SignalingClient: NSObject {
     weak var delegate: SignalingClientDelegate?
     private var isConnected = false
     private var pingTimer: Timer?
+    private var reconnectTimer: Timer?
+    private var shouldReconnect = true
+    private static var persistentId: String = UUID().uuidString  // survive reconnects
 
-    init(serverURL: URL, room: String, peerId: String = UUID().uuidString) {
+    init(serverURL: URL, room: String, peerId: String? = nil) {
         self.serverURL = serverURL
         self.room = room
-        self.peerId = peerId
+        self.peerId = peerId ?? Self.persistentId
         super.init()
     }
 
@@ -44,8 +47,9 @@ final class SignalingClient: NSObject {
     }
 
     func disconnect() {
-        pingTimer?.invalidate()
-        pingTimer = nil
+        shouldReconnect = false
+        pingTimer?.invalidate(); pingTimer = nil
+        reconnectTimer?.invalidate(); reconnectTimer = nil
         webSocket?.cancel(with: .normalClosure, reason: nil)
         isConnected = false
     }
@@ -127,6 +131,10 @@ extension SignalingClient: URLSessionWebSocketDelegate {
 
     func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
         isConnected = false
-        print("[5bit] Disconnected")
+        print("[5bit] Disconnected — reconnecting in 2s")
+        guard shouldReconnect else { return }
+        reconnectTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { [weak self] _ in
+            self?.connect()
+        }
     }
 }

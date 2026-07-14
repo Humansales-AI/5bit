@@ -40,7 +40,12 @@ final class WebRTCClient: NSObject {
         self.videoCapturer = RTCCameraVideoCapturer(delegate: videoSource)
 
         let config = RTCConfiguration()
-        config.iceServers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        config.iceServers = [
+            RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302",
+                                       "stun:stun1.l.google.com:19302"])
+        ]
+        config.iceConnectionReceivingTimeout = 120000  // 2 min
+        config.iceCheckMinInterval = nil  // faster checking
         config.sdpSemantics = .unifiedPlan
         config.continualGatheringPolicy = .gatherContinually
 
