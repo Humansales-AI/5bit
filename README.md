@@ -105,32 +105,28 @@ Four contexts, same 32 binary codes. 28 mappable slots each (00000–11011). Fou
 | `11110` | **END** | **END** | **END** | **END** | **END** |
 | `11111` | **START** | **START** | **START** | **START** | **START** |
 
-### Compiler opcode convention (NUM context, tokens 15-25)
+### Compiler opcode map (NUM tokens 15-24)
 
-The 5bit→x86-64 compiler uses NUM-context token values 15-25 as emission
-targets. These are NOT SPECIAL3 commands — they are integer values the
-compiler's dispatch chain tests via three-way IF:
+The 5bit→x86-64 compiler maps NUM token values to x86-64 instructions.
+These are application-level conventions — the compiler's three-way IF
+dispatch chain selects the handler:
 
-| NUM token | x86-64 emitted |
-|---|---|
-| 15 | `syscall` (0F 05) — kernel interface |
-| 16 | `and rax, rbx` |
-| 17 | `or rax, rbx` |
-| 18 | `xor rax, rbx` |
-| 19 | `shl rax, cl` |
-| 20 | `sar rax, cl` |
-| 21 | `not rax` |
-| 22 | `popcnt rax, rax` — Hamming distance in one instruction |
-| 23 | `movzx rax, byte [rax]` — byte load |
-| 24 | `mov [rbx], al` — byte store |
+| Token | Name | Operation |
+|---|---|---|
+| 15 | SYSCALL | kernel call (pop 4 args, syscall, push result) |
+| 16 | AND | bitwise AND |
+| 17 | OR | bitwise OR |
+| 18 | XOR | bitwise XOR |
+| 19 | SHL | shift left |
+| 20 | SHR | arithmetic shift right |
+| 21 | NOT | bitwise NOT |
+| 22 | POPCNT | population count (Hamming distance) |
+| 23 | MOVZX | byte load from arena |
+| 24 | MOVB | byte store to arena |
 
-**How a human writes `int 255 int 15 xor emit` and gets machine code:**
-The 5bit assembler turns text into tokens `[2,5,5,30, 1,5,30, 18, 14, 28]`.
-The compiler.5b (9192 5bit tokens, running on the interpreter) reads each
-token: `2,5,5,30` → push 255, `1,5,30` → push 15, `18` → dispatch to XOR
-handler which emits `5B 58 48 31 D8 50`. Token `14` emits `58 C3`. The CPU
-executes those bytes. The compiler IS the translator — 5bit tokens reading
-5bit tokens, emitting native code.
+Tokens 0-9 emit integer literals. 10-13 emit `+ - * /`. 14 emits
+`EMIT` (return). 15-24 above. The compiler is 9192 tokens, verified
+with XOR and AND.
 
 ---
 
