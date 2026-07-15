@@ -86,17 +86,17 @@ Four contexts, same 32 binary codes. 28 mappable slots each (00000–11011). Fou
 | `01011` | `-` | `L`  | `l`     | `,`      | `BREAK`  |
 | `01100` | `*` | `M`  | `m`     | `/`      | `STORE`  |
 | `01101` | `/` | `N`  | `n`     | `:`      | `READ`   |
-| `01110` | `=` | `O`  | `o`     | `;`      | `—`      |
-| `01111` | `(` | `P`  | `p`     | `<`      | `—`      |
-| `10000` | `)` | `Q`  | `q`     | `=`      | `—`      |
-| `10001` | `-1`| `R`  | `r`     | `>`      | `—`      |
-| `10010` | `-2`| `S`  | `s`     | `?`      | `LOADX`  |
-| `10011` | `-3`| `T`  | `t`     | `[`      | `STOREX` |
-| `10100` | `-4`| `U`  | `u`     | `\`      | `—`      |
-| `10101` | `-5`| `V`  | `v`     | `]`      | `—`      |
-| `10110` | `-6`| `W`  | `w`     | `^`      | `—`      |
-| `10111` | `-7`| `X`  | `x`     | `_`      | `—`      |
-| `11000` | `-8`| `Y`  | `y`     | `` ` ``  | `—`      |
+| `01110` | `=` | `O`  | `o`     | `;`      | `EMIT`   |
+| `01111` | `(` | `P`  | `p`     | `<`      | `SYSCALL`|
+| `10000` | `)` | `Q`  | `q`     | `=`      | `AND`    |
+| `10001` | `-1`| `R`  | `r`     | `>`      | `OR`     |
+| `10010` | `-2`| `S`  | `s`     | `?`      | `XOR`    |
+| `10011` | `-3`| `T`  | `t`     | `[`      | `SHL`    |
+| `10100` | `-4`| `U`  | `u`     | `\`      | `SHR`    |
+| `10101` | `-5`| `V`  | `v`     | `]`      | `NOT`    |
+| `10110` | `-6`| `W`  | `w`     | `^`      | `POPCNT` |
+| `10111` | `-7`| `X`  | `x`     | `_`      | `MOVZX`  |
+| `11000` | `-8`| `Y`  | `y`     | `` ` ``  | `MOVB`   |
 | `11001` | `-9`| `Z`  | `z`     | `{`      | `—`      |
 | `11010` | `^` | `␣`  | `@`     | `\|`     | `—`      |
 | `11011` | `S` | `.`  | `-`     | `}`      | `—`      |
@@ -104,37 +104,6 @@ Four contexts, same 32 binary codes. 28 mappable slots each (00000–11011). Fou
 | `11101` | **CHECKSUM** | **CHECKSUM** | **CHECKSUM** | **CHECKSUM** | **CHECKSUM** |
 | `11110` | **END** | **END** | **END** | **END** | **END** |
 | `11111` | **START** | **START** | **START** | **START** | **START** |
-
-### Full NUM context — compiler emission targets
-
-Every NUM token (0-31) maps to a specific x86-64 instruction sequence
-when processed by compiler.5b. This is the complete table:
-
-| Token | Name | What the compiler emits |
-|---|---|---|
-| 0-9 | D0-D9 | `mov rax, imm; push rax` — integer literal |
-| 10 | PLUS | `pop rbx; pop rax; add rax, rbx; push rax` |
-| 11 | MINUS | `pop rbx; pop rax; sub rax, rbx; push rax` |
-| 12 | MUL | `pop rbx; pop rax; imul rax, rbx; push rax` |
-| 13 | DIV | `pop rbx; pop rax; cqo; idiv rbx; push rax` |
-| 14 | EMIT | `pop rax; ret` — returns the value to caller |
-| 15 | SYSCALL | pop 4 args → registers → `syscall` → push result |
-| 16 | AND | pop 2 values → `and` → push result |
-| 17 | OR | pop 2 values → `or` → push result |
-| 18 | XOR | pop 2 values → `xor` → push result |
-| 19 | SHL | pop shift count, value → `shl` → push result |
-| 20 | SHR | pop shift count, value → `sar` → push result |
-| 21 | NOT | pop value → `not` → push result |
-| 22 | POPCNT | pop value → `popcnt` → push result |
-| 23 | MOVZX | pop address → `movzx byte [addr]` → push result |
-| 24 | MOVB | pop address, value → `mov [addr], al` |
-| 25-27 | — | banked (3 slots available) |
-| 28 | RECORD | end of program (implicit ret) |
-| 29 | CHECKSUM | integrity marker (no-op at runtime) |
-| 30 | END | value finalizer / context pop |
-| 31 | START | context push |
-
-The compiler is 9192 tokens. Verified: XOR(18), AND(16), arithmetic(10-13), EMIT(14).
 
 ---
 
