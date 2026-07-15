@@ -61,10 +61,15 @@ _RAW = {
     **{f'D{i}': Token(i) for i in range(10)},
     **{f'N{i}': Token(16 + i) for i in range(1, 10)},
     'PLUS': Token(10), 'MINUS': Token(11), 'MUL': Token(12), 'DIV': Token(13),
-    'EQ': Token(14), 'LPAREN': Token(15), 'RPAREN': Token(16),
+    'EQ': Token(14), 'EMIT': Token(14), 'LPAREN': Token(15), 'RPAREN': Token(16),
     'POW': Token(26), 'SCALE': Token(27),
     'RECORD': Token.RECORD, 'CHECKSUM': Token.CHECKSUM,
     'END': Token.END, 'START': Token.START,
+    # Compiler opcodes (NUM context tokens 15-24)
+    'SYSCALL': Token(15), 'AND': Token(16), 'OR': Token(17),
+    'XOR': Token(18), 'SHL': Token(19), 'SHR': Token(20),
+    'NOT': Token(21), 'POPCNT': Token(22),
+    'MOVZX': Token(23), 'MOVB': Token(24),
 }
 _RAW_INV = {v: k for k, v in _RAW.items()}
 
