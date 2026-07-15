@@ -72,8 +72,24 @@ _main:
 103: subq $8, %r13; movq (%r13), %rax
     subq $8, %r13; movq (%r13), %rdi
     subq $8, %r13; movq (%r13), %rsi
-    subq $8, %r13; movq (%r13), %rdx; syscall
-    movq %rax, (%r13); addq $8, %r13; jmp 3b
+    subq $8, %r13; movq (%r13), %rdx
+    cmpq $33554529, %rax; je 200f
+    cmpq $33554536, %rax; je 201f
+    cmpq $33554538, %rax; je 202f
+    cmpq $33554462, %rax; je 203f
+    cmpq $33554435, %rax; je 204f
+    cmpq $33554436, %rax; je 205f
+    cmpq $33554438, %rax; je 206f
+    syscall
+    jmp 207f
+200: callq _socket; jmp 207f
+201: movq %rdi, %rbx; movq %rsi, %rdx; movq %rbx, %rdi; callq _bind; jmp 207f
+202: callq _listen; jmp 207f
+203: callq _accept; jmp 207f
+204: callq _read; jmp 207f
+205: callq _write; jmp 207f
+206: callq _close; jmp 207f
+207: movq %rax, (%r13); addq $8, %r13; jmp 3b
 104: subq $8, %r13; movq (%r13), %rax
     subq $8, %r13; andq %rax, (%r13); addq $8, %r13; jmp 3b
 105: subq $8, %r13; movq (%r13), %rax
