@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang=en>
+<head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>5bit CRM - Login</title>
+<script src=https://cdn.tailwindcss.com></script>
+</head>
+<body class="bg-zinc-950 min-h-screen flex items-center justify-center">
+<div class="w-full max-w-sm">
+  <div class="text-center mb-8">
+    <h1 class="text-3xl font-bold"><span class="text-emerald-400">5bit</span> CRM</h1>
+    <p class="text-zinc-500 text-sm mt-2">Grid DB · Assembly Server</p>
+  </div>
+  <form method="POST" action="/login" class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
+    <div>
+      <label class="block text-xs text-zinc-500 uppercase tracking-wide mb-1">Username</label>
+      <input name="user" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-zinc-100 focus:outline-none focus:border-emerald-500">
+    </div>
+    <div>
+      <label class="block text-xs text-zinc-500 uppercase tracking-wide mb-1">Password</label>
+      <input name="pass" type="password" class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-zinc-100 focus:outline-none focus:border-emerald-500">
+    </div>
+    <button class="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold py-3 rounded-lg transition">Sign In</button>
+  </form>
+  <p class="text-center text-xs text-zinc-600 mt-4">Default: admin / 5bit</p>
+</div>
+</body>
+</html>
