@@ -1,13 +1,13 @@
 # 5bit
 
 ```
-   █████████    ██████    ██    ████████
-  ██       ██  ██    ██  ██      ██
-  ██       ██  ██    ██  ██      ██
-  ███████████  ████████  ██      ██
-  ██       ██  ██    ██  ██      ██
-  ██       ██  ██    ██  ██      ██
-      5         B        I      T
+  55555555   BBBBBBBB   IIIIIIII  TTTTTTTTT
+ 55         BB     BB     II        TTT
+ 55         BB     BB     II        TTT
+ 55555555   BBBBBBBB      II        TTT
+       55   BB     BB     II        TTT
+       55   BB     BB     II        TTT
+  5555555   BBBBBBBB   IIIIIIII     TTT
 
   VM · DB · Language · Runtime · Compiler
     32 tokens. 5 bits. One substrate.
