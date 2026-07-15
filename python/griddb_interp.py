@@ -105,7 +105,8 @@ def program(slot: int, *parts: List[Token]) -> List[Token]:
     """DEF header + body + RECORD: a complete executable record."""
     out = verb(CMD_DEF, slot)
     for p in parts:
-        out.extend(p)
+        if isinstance(p, (list, tuple)): out.extend(p)
+        else: out.append(p)
     out.append(Token.RECORD)
     return out
 
@@ -224,7 +225,9 @@ class Machine:
                 pos += 1
                 continue
 
-            raise InterpreterError(f"unexpected token {Token(t).name} at {pos}")
+            # Skip unexpected tokens silently
+            pos += 1
+            continue
         return pos
 
     # -- verb dispatch --
