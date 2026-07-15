@@ -288,9 +288,16 @@ def _dispatch_current():
                                                             region(
                                                                 verb(CMD_READ, TK), num(14), [MINUS],
                                                                 verb(CMD_IF),
-                                                                region(*_compile_verbs()),  # +arm: TK > 14
+                                                                # +arm: TK > 14 → check TK-15
+                                                                region(
+                                                                    verb(CMD_READ, TK), num(15), [MINUS],
+                                                                    verb(CMD_IF),
+                                                                    region(*_compile_verbs()),    # +arm: TK > 15 → verbs
+                                                                    region(*_compile_syscall()),  # 0arm: TK == 15 = SYSCALL
+                                                                    region(),
+                                                                ),
                                                                 region(*_compile_emit()),   # 0arm: TK == 14 = EMIT
-                                                                region(),  # -arm: impossible
+                                                                region(),
                                                             ),
                                                             # 0arm: TK == 13 = DIV
                                                             region(*_compile_div()),
@@ -381,6 +388,26 @@ def _compile_div():
 def _compile_emit():
     """pop rax; ret"""
     return emit_bytes(insn_pop_rax() + insn_ret())
+
+def _compile_syscall():
+    """Pop 4 values (syscall_num, arg1, arg2, arg3) from value stack,
+    set up registers, issue syscall, push return value.
+    Stack order: TOS=syscall_num, then arg1, arg2, arg3 below.
+    So we pop: rbx=num, rdi=arg1, rsi=arg2, rdx=arg3.
+    Then: mov rax, rbx; syscall; push rax."""
+    return emit_bytes([
+        0x5B,             # pop rbx        ; syscall number
+        0x58,             # pop rax
+        0x48, 0x97,       # xchg rax, rdi  ; rdi = arg1
+        0x58,             # pop rax
+        0x48, 0x96,       # xchg rax, rsi  ; rsi = arg2
+        0x58,             # pop rax
+        0x48, 0x92,       # xchg rax, rdx  ; rdx = arg3
+        0x53,             # push rbx
+        0x58,             # pop rax        ; rax = syscall number
+        0x0F, 0x05,       # syscall
+        0x50,             # push rax       ; return value
+    ])
 
 def _compile_verbs():
     """Dispatch on V_IF=9, V_LOOP=10, V_BREAK=11, V_STORE=12, V_READ=13, V_CALL=7, V_RET=8
