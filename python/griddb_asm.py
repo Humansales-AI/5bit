@@ -112,6 +112,11 @@ class Assembler:
                 if not m:
                     raise ValueError('revoke needs: <slot> holder <h>')
                 return self.own.revoke(slot=int(m.group(1)), holder=int(m.group(2)))
+            if op == 'def':
+                m = re.fullmatch(r'\s*(\d+)\s*', rest)
+                if not m: raise ValueError('def needs: <slot>')
+                slot = int(m.group(1))
+                return [Token.START]*4 + [Token(6)] + [Token.END]*4 + list(Encoder.encode_integer(slot))
             if op == 'record':
                 return [Token.RECORD]
             if op == 'checksum':
