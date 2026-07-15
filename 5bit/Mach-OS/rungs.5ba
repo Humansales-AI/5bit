@@ -1,0 +1,84 @@
+; rungs.5ba — the 5xintN rung packer, WRITTEN IN 5BIT.
+; pack_to_bytes(tokens): acc=(acc SHL 5) OR t; nbits+=5;
+;   while nbits>=8: nbits-=8; emit (acc SHR nbits) AND 255
+; Uses ONLY opcodes proven in compiler_ext.5ba: SHL(20) OR(18) AND(17) SHR(21)
+;   PLUS(10) MINUS(11) IF(9) EMIT(14) READ STORE LOOP BREAK
+; Slots: ACC=10 NBITS=11 TOK=12 TMP=13  tokens in TOKBASE=100.., count in N=9
+def 1
+  int 0
+  raw STORE 10        ; ACC = 0
+  int 0
+  raw STORE 11        ; NBITS = 0
+  int 0
+  raw STORE 8         ; i = 0
+  ; for each token:
+  raw LOOP
+    lparen
+      ; if i >= N: break
+      raw READ 8
+      raw READ 9
+      raw MINUS
+      raw IF
+        lparen raw BREAK rparen       ; i>=N (positive) -> done
+        lparen raw BREAK rparen       ; i==N (zero) -> done
+        lparen                         ; i<N (negative) -> body
+          ; TOK = tokens[TOKBASE + i]
+          int 100
+          raw READ 8
+          raw PLUS
+          raw LOADX
+          raw STORE 12
+          ; ACC = (ACC SHL 5) OR (TOK AND 31)
+          raw READ 10
+          int 5
+          raw SHL
+          raw READ 12
+          int 31
+          raw AND
+          raw OR
+          raw STORE 10
+          ; NBITS = NBITS + 5
+          raw READ 11
+          int 5
+          raw PLUS
+          raw STORE 11
+          ; while NBITS >= 8: emit byte
+          raw LOOP
+            lparen
+              raw READ 11
+              int 8
+              raw MINUS
+              raw IF
+                lparen                 ; NBITS-8 > 0 : still >=8 after? emit then continue
+                  raw READ 11
+                  int 8
+                  raw MINUS
+                  raw STORE 11         ; NBITS -= 8
+                  raw READ 10
+                  raw READ 11
+                  raw SHR
+                  int 255
+                  raw AND
+                  raw EMIT             ; emit (ACC SHR NBITS) AND 255
+                rparen
+                lparen                 ; NBITS==8 exactly: emit one byte, then break
+                  int 0
+                  raw STORE 11
+                  raw READ 10
+                  int 0
+                  raw SHR
+                  int 255
+                  raw AND
+                  raw EMIT
+                  raw BREAK
+                rparen
+                lparen raw BREAK rparen ; NBITS<8 : done
+            rparen
+          ; i = i + 1
+          raw READ 8
+          int 1
+          raw PLUS
+          raw STORE 8
+        rparen
+    rparen
+record

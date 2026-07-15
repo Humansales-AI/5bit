@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5bit Pipeline — logic runs in 5bit tokens</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center font-sans">
+  <div class="w-full max-w-md p-8">
+    <div class="mb-8 text-center">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono mb-3">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        compute: 5bit tokens · doorman: C sockets
+      </div>
+      <h1 class="text-3xl font-bold tracking-tight">Deal Pipeline</h1>
+      <p class="text-slate-400 text-sm mt-1">Every number below was computed by a 5bit program, not JavaScript.</p>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 mb-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
+        <div class="text-2xl font-bold text-emerald-400" id="total">0</div>
+        <div class="text-xs text-slate-500 mt-1 uppercase tracking-wide">Total</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
+        <div class="text-2xl font-bold text-sky-400" id="count">0</div>
+        <div class="text-xs text-slate-500 mt-1 uppercase tracking-wide">Deals</div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-center">
+        <div class="text-2xl font-bold text-violet-400" id="avg">0</div>
+        <div class="text-xs text-slate-500 mt-1 uppercase tracking-wide">Avg</div>
+      </div>
+    </div>
+
+    <div class="flex gap-2">
+      <input id="val" type="number" placeholder="Deal value" value="5000"
+        class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition">
+      <button onclick="addDeal()"
+        class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold px-6 py-3 rounded-xl transition active:scale-95">
+        Add
+      </button>
+    </div>
+
+    <div class="mt-6 bg-slate-900/50 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-500 leading-relaxed">
+      <div class="text-slate-400 mb-1">// 5bit program (app.5ba)</div>
+      <div>total = total + input</div>
+      <div>count = count + 1</div>
+      <div>avg = <span class="text-violet-400">IF</span> count &gt; 0 → total / count</div>
+    </div>
+  </div>
+
+<script>
+async function addDeal() {
+  const val = document.getElementById('val').value || 0;
+  const res = await fetch('/deal', {method:'POST', body: val});
+  const data = await res.json();   // {total, count, avg} — computed by 5bit
+  document.getElementById('total').textContent = data.total.toLocaleString();
+  document.getElementById('count').textContent = data.count;
+  document.getElementById('avg').textContent = data.avg.toLocaleString();
+}
+</script>
+</body>
+</html>

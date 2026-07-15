@@ -1,0 +1,76 @@
+; http.5ba — HTTP SERVER IN 5BIT. macOS version.
+; macOS syscall numbers (with Unix class prefix 0x2000000):
+;   socket=0x2000061 (97+0x2000000), bind=0x2000068 (104+0x2000000)
+;   listen=0x200006A (106+0x2000000), accept=0x200001E (30+0x2000000)
+;   read=0x2000003 (3+0x2000000), write=0x2000004 (4+0x2000000)
+;   close=0x2000006 (6+0x2000000), exit=0x2000001 (1+0x2000000)
+;
+; Slots: SOCK=400, CONN=401, BUF=1000
+; SYSCALL convention: push [nr,a1,a2,a3]; SYSCALL; result pushed.
+def 1
+  ; --- socket(AF_INET=2, SOCK_STREAM=1, 0) -> SOCK ---
+  int 33554529       ; socket = 0x2000061
+  int 2              ; AF_INET
+  int 1              ; SOCK_STREAM
+  int 0
+  raw SYSCALL
+  raw STORE 400      ; SOCK = fd
+
+  ; --- bind(SOCK, sockaddr{port 8080}, 16) ---
+  int 33554536       ; bind = 0x2000068
+  raw READ 400
+  int 500            ; &sockaddr (slot region)
+  int 16
+  raw SYSCALL
+  raw STORE 402
+
+  ; --- listen(SOCK, 16) ---
+  int 33554538       ; listen = 0x200006A
+  raw READ 400
+  int 16
+  int 0
+  raw SYSCALL
+
+  ; --- accept loop ---
+  raw LOOP
+    lparen
+      ; accept(SOCK, 0, 0) -> CONN
+      int 33554462     ; accept = 0x200001E
+      raw READ 400
+      int 0
+      int 0
+      raw SYSCALL
+      raw STORE 401
+
+      ; read(CONN, BUF, 4096)
+      int 33554435     ; read = 0x2000003
+      raw READ 401
+      int 1000
+      int 4096
+      raw SYSCALL
+      raw STORE 403
+
+      ; route: is BUF[0]=='P' (80)? POST handler
+      raw READ 1000
+      int 80
+      raw MINUS
+      raw IF
+        lparen rparen
+        lparen
+          ; POST -> compute + respond
+          int 33554436   ; write = 0x2000004
+          raw READ 401
+          int 2000
+          int 64
+          raw SYSCALL
+        rparen
+        lparen rparen
+
+      ; close(CONN)
+      int 33554438     ; close = 0x2000006
+      raw READ 401
+      int 0
+      int 0
+      raw SYSCALL
+    rparen
+record

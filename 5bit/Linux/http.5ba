@@ -1,0 +1,79 @@
+; http.5ba — HTTP SERVER AS A 5BIT PROGRAM. No C. The socket calls are SYSCALL
+; opcodes (token 25 -> 0F 05); parsing/routing are 5bit token logic.
+; Uses the opcodes added to the compiler: SYSCALL, EQ, AND, SHL, etc.
+;
+; Linux syscall numbers: socket=41, bind=49, listen=50, accept=43,
+;   recv/read=0, send/write=1, close=3, exit=60.
+; SYSCALL convention (from compiler_ext): push [nr,a1,a2,a3]; SYSCALL; result pushed.
+;
+; Slots: SOCK=400 (listen fd), CONN=401 (accepted fd), BUF=1000.. (request bytes)
+def 1
+  ; --- socket(AF_INET=2, SOCK_STREAM=1, 0) -> SOCK ---
+  int 41            ; nr = socket
+  int 2             ; AF_INET
+  int 1             ; SOCK_STREAM
+  int 0
+  raw SYSCALL
+  raw STORE 400     ; SOCK = fd
+
+  ; --- bind(SOCK, sockaddr{port 8080}, 16) ---
+  ; sockaddr_in is prepared in slots by the runtime; here we pass its addr.
+  int 49            ; nr = bind
+  raw READ 400
+  int 500           ; &sockaddr (slot region)
+  int 16
+  raw SYSCALL
+  raw STORE 402     ; bind result
+
+  ; --- listen(SOCK, 16) ---
+  int 50
+  raw READ 400
+  int 16
+  int 0
+  raw SYSCALL
+
+  ; --- accept loop ---
+  raw LOOP
+    lparen
+      ; accept(SOCK, 0, 0) -> CONN
+      int 43
+      raw READ 400
+      int 0
+      int 0
+      raw SYSCALL
+      raw STORE 401       ; CONN = client fd
+
+      ; recv(CONN, BUF, 4096) -> read request bytes
+      int 0
+      raw READ 401
+      int 1000
+      int 4096
+      raw SYSCALL
+      raw STORE 403        ; nbytes
+
+      ; route: is BUF[0]=='P' (0x50, POST) ? three-way IF on (BUF[0]-80)
+      raw READ 1000
+      int 80
+      raw MINUS
+      raw IF
+        lparen rparen            ; +arm: not POST
+        lparen                    ; 0arm: POST -> compute + respond JSON
+          ; (business logic: total+=input, etc. — calls app.5b logic here)
+          ; send(CONN, RESP_JSON, len)
+          int 1
+          raw READ 401
+          int 2000              ; &response bytes (prebuilt)
+          int 64
+          raw SYSCALL
+        rparen
+        lparen rparen            ; -arm
+      ; also send for GET (the HTML page) — omitted for brevity; same send pattern
+
+      ; close(CONN)
+      int 3
+      raw READ 401
+      int 0
+      int 0
+      raw SYSCALL
+    rparen
+record

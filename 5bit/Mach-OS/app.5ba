@@ -1,0 +1,47 @@
+; app.5ba — the web app's BUSINESS LOGIC, written in 5bit.
+; A deal pipeline: each POST adds a deal value; GET returns the running total
+; and count. State lives in grid slots (durable, grant-protected).
+;
+; Slots:
+;   TOTAL = 300   running pipeline value
+;   COUNT = 301   number of deals
+;   INPUT = 302   the new deal value (written by the doorman from the request)
+;   AVG   = 303   computed average
+;
+; Verbs used: READ, STORE, PLUS, DIV, three-way IF, EMIT
+def 1
+  ; total = total + input
+  raw READ 300
+  raw READ 302
+  raw PLUS
+  raw STORE 300
+  ; count = count + 1
+  raw READ 301
+  int 1
+  raw PLUS
+  raw STORE 301
+  ; avg = total / count  (guard count>0 via three-way IF on count)
+  raw READ 301
+  raw IF
+    ; +arm: count>0 -> avg = total/count
+    lparen
+      raw READ 300
+      raw READ 301
+      raw DIV
+      raw STORE 303
+    rparen
+    ; 0arm: count==0 -> avg = 0
+    lparen
+      int 0
+      raw STORE 303
+    rparen
+    ; -arm: (never)
+    lparen rparen
+  ; emit total, count, avg
+  raw READ 300
+  raw EMIT
+  raw READ 301
+  raw EMIT
+  raw READ 303
+  raw EMIT
+record
