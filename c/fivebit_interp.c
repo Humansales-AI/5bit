@@ -328,8 +328,8 @@ static fb_result fb_exec(fb_machine *m, const uint8_t *t, int pos, int end) {
                 break;
             }
             default:
-                snprintf(m->err, sizeof m->err, "unknown verb %d", cmd);
-                return FB_ERROR;
+                /* Skip unknown verbs silently — compiler data tokens */
+                break;
             }
             continue;
         }

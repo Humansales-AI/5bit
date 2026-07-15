@@ -70,6 +70,13 @@ _RAW = {
     'XOR': Token(18), 'SHL': Token(19), 'SHR': Token(20),
     'NOT': Token(21), 'POPCNT': Token(22),
     'MOVZX': Token(23), 'MOVB': Token(24),
+    # SPECIAL3 verbs (for raw command usage in 5bit source)
+    'DEF': Token(6), 'CALL': Token(7), 'RET': Token(8),
+    'IF': Token(9), 'LOOP': Token(10), 'BREAK': Token(11),
+    'STORE': Token(12), 'READ': Token(13), 'EMIT': Token(14),
+    'LOADX': Token(18), 'STOREX': Token(19),
+    # Synonyms
+    'SUB': Token(11), 'DIVIDE': Token(13),
 }
 _RAW_INV = {v: k for k, v in _RAW.items()}
 
@@ -122,6 +129,18 @@ class Assembler:
                 if not m: raise ValueError('def needs: <slot>')
                 slot = int(m.group(1))
                 return [Token.START]*4 + [Token(6)] + [Token.END]*4 + list(Encoder.encode_integer(slot))
+            # SPECIAL3 verb statements (STARTx4 cmd ENDx4 [arg])
+            verb_map = {'store':12, 'read':13, 'call':7, 'if':9, 'loop':10, 'break':11,
+                        'loadx':18, 'storex':19, 'emit':14, 'ret':8}
+            if op in verb_map:
+                cmd = verb_map[op]
+                tokens = [Token.START]*4 + [Token(cmd)] + [Token.END]*4
+                if rest.strip():
+                    m = re.fullmatch(r'\s*(\d+)\s*', rest)
+                    if m: tokens += list(Encoder.encode_integer(int(m.group(1))))
+                return tokens
+            if op in ('lparen', '('): return [Token(15)]
+            if op in ('rparen', ')'): return [Token(16)]
             if op == 'record':
                 return [Token.RECORD]
             if op == 'checksum':

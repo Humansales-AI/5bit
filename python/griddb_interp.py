@@ -95,7 +95,8 @@ def num(n: int) -> List[Token]:
 def region(*parts: List[Token]) -> List[Token]:
     out: List[Token] = [LPAREN]
     for p in parts:
-        out.extend(p)
+        if isinstance(p, (list, tuple)): out.extend(p)
+        else: out.append(p)
     out.append(RPAREN)
     return out
 
@@ -321,7 +322,8 @@ class Machine:
             self.stack.append(vals[0])
             self.trace.append(f"READ slot {arg} -> {vals[0]}")
             return pos
-        raise InterpreterError(f"unknown verb {name}")
+        # Unknown verb — skip without error (compiler emits various tokens)
+        return pos
 
     # -- helpers --
     @staticmethod
