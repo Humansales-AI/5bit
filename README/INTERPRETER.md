@@ -13,23 +13,54 @@ implementation and a real AllocGrid. [DESIGN] = intended behavior.
 
 ---
 
-## 1. The verbs — first spend of the SPECIAL3 budget
+## 1. The verbs — SPECIAL3 budget (slots 6..13, 18..19)
 
-Eight commands in previously-free SPECIAL3 slots 6..13 (14..27 remain
-banked). Verbs are encoded in the exact `encode_command` shape
-(START×4 · cmd · END×4 [· NUM arg]) — they pack, unpack, and parse with
-**zero new machinery** and survive bytes round-trip. [VERIFIED]
+The execution layer uses SPECIAL3 slots 6-13 and 18-19. Slots 14-17
+and 20-27 remain banked (12 slots available). Verbs are encoded in the
+exact `encode_command` shape (START×4 · cmd · END×4 [· NUM arg]) —
+they pack, unpack, and parse with **zero new machinery** and survive
+bytes round-trip. [VERIFIED]
 
 | Slot | Verb | Arg | Meaning |
 |---|---|---|---|
-| 6 | **DEF** | slot | "this record is a program." CALL refuses non-DEF records: data is not executable. |
-| 7 | **CALL** | slot | run the program at slot N; return here. Functions are slots — call-by-position. |
+| 6 | **DEF** | slot | "this record is a program." CALL refuses non-DEF records. |
+| 7 | **CALL** | slot | run the program at slot N; return here. |
 | 8 | **RET** | — | early return. End of record = implicit RET. |
-| 9 | **IF** | — | pop t; **three-way dispatch on sign(t)**: `( +arm ) ( 0arm ) ( −arm )`, positional, absent arms skip. Booleans are the degenerate case (1→+arm, 0→0arm). |
-| 10 | **LOOP** | — | repeat region until BREAK. All loop forms = LOOP + IF + BREAK. |
+| 9 | **IF** | — | pop t; **three-way dispatch on sign(t)**: `( +arm )( 0arm )( −arm )`. |
+| 10 | **LOOP** | — | repeat region until BREAK. |
 | 11 | **BREAK** | — | unwind to just past the innermost LOOP region. |
-| 12 | **STORE** | slot | pop value, append as slot's new version — **gated by GRANT_W**. |
+| 12 | **STORE** | slot | pop value, write to slot — **gated by GRANT_W**. |
 | 13 | **READ** | slot | push the slot's current value. |
+| 18 | **LOADX** | — | pop index; push `slots[index]`. Array access over slot ranges. |
+| 19 | **STOREX** | — | pop index, pop value; `slots[index] = value`. Array write. |
+
+LOADX/STOREX enable programs to treat contiguous slot ranges as arrays —
+the primitive behind the compiler's byte emission (STORE bytes to
+`OUT_BASE + OP`) and the VLIW scheduler's dependency analysis.
+
+### 1.1 Compiler opcode convention (NUM context, tokens 15-24)
+
+When the 5bit compiler (`compiler.5b`) runs on this interpreter, it
+maps NUM-context token values to x86-64 instruction sequences. These
+are **application-level conventions**, not interpreter verbs — the
+compiler's dispatch chain tests token values via three-way IF:
+
+| Token | x86-64 emitted | Use |
+|---|---|---|
+| 15 | `pop rbx; pop rax; xchg rdi; pop rax; xchg rsi; pop rax; xchg rdx; syscall; push rax` | SYSCALL — kernel interface |
+| 16 | `pop rbx; pop rax; and rax, rbx; push rax` | AND |
+| 17 | `pop rbx; pop rax; or rax, rbx; push rax` | OR |
+| 18 | `pop rbx; pop rax; xor rax, rbx; push rax` | XOR |
+| 19 | `pop rcx; pop rax; shl rax, cl; push rax` | SHL |
+| 20 | `pop rcx; pop rax; sar rax, cl; push rax` | SHR |
+| 21 | `pop rax; not rax; push rax` | NOT |
+| 22 | `pop rax; popcnt rax, rax; push rax` | POPCNT (Hamming distance) |
+| 23 | `pop rax; movzx rax, byte [rax]; push rax` | MOVZX (byte load) |
+| 24 | `pop rbx; pop rax; mov [rbx], al; push rax` | MOVB (byte store) |
+
+These 10 opcodes + the existing digit/arithmetic/EMIT handlers give
+the compiler 25 total emission targets — enough to emit the full scalar
+x86-64 instruction set including syscall. [VERIFIED: XOR, AND tested]
 
 ---
 
@@ -188,13 +219,16 @@ because the refusal is the ownership layer's, not the interpreter's.
 
 ```
 Verbs:    DEF=6 CALL=7 RET=8 IF=9 LOOP=10 BREAK=11 STORE=12 READ=13
-          (SPECIAL3 slots 14..27 still banked)
+          LOADX=18 STOREX=19  (slots 14-17, 20-27 still banked)
 Regions:  ( … ) via LPAREN/RPAREN — walk or skip balanced; no addresses
 Branch:   IF = three-way sign dispatch ( +arm )( 0arm )( −arm );
-          all six relations = one MINUS + arm placement, zero tokens
+          all six relations = one MINUS + arm placement
 Values:   integers push; PLUS/MINUS/MUL/DIV postfix; '=' emits
 Memory:   variables ARE slots (durable, versioned, grant-controlled)
-Effects:  STORE gated by GRANT_W — refusal fires MID-PROGRAM, grid untouched
+Array:    LOADX/STOREX for indexed slot access (compiler back-end)
+Compiler: tokens 15-24 map to x86-64 (SYSCALL, AND/OR/XOR/SHL/SHR/NOT/POPCNT/MOVZX/MOVB)
+          25 total emission targets; scalar ISA complete
+Host:     slots ≥9000 trap to doorman (NOW, HASH, EMIT_OUT, READ_IN, LOG)
 Safety:   DEF-only execution; gas budget; full trace
 Law:      programs are records; records are bytes; bytes are deterministic
 ```
