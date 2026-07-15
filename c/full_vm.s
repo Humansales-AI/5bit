@@ -7,7 +7,33 @@ _main:
     testq %rax, %rax; js err; movq %rax, %r14
     leaq Lbuf(%rip), %rsi; movq %r14, %rdi; movl $4096, %edx; callq _read
     movq %rax, %r15; movq %r14, %rdi; callq _close
-    leaq Lbuf+1(%rip), %r12
+    # Unpack 5-bit packed bytes -> tokens
+    # r15 = bytes_read, Lbuf[0] = pad
+    movzbl Lbuf(%rip), %r14d            # pad bits
+    movq %r15, %rbx
+    decq %rbx                           # data bytes = bytes_read - 1 (skip pad byte)
+    leaq Lbuf+1(%rip), %rsi             # source = packed data
+    leaq Tbuf(%rip), %r12               # dest = token buffer
+    xorq %rdx, %rdx                     # accumulator
+    xorq %rcx, %rcx                     # nbits in accumulator
+    leaq (%rsi,%rbx), %r8               # source end
+    shlq $3, %rbx                       # total_bits_raw = data_bytes * 8
+    subq %r14, %rbx                     # valid_bits = total_bits_raw - pad
+    movq %rbx, %r9                      # save valid_bits
+    shrq $3, %rbx                       # valid_bytes = valid_bits / 8
+    leaq (%rsi,%rbx), %r10              # end of valid data (ignoring partial byte)
+.unpack_loop:
+    cmpq %r8, %rsi; jae .unpack_done
+    movzbl (%rsi), %eax; incq %rsi
+    shlq $8, %rdx; orq %rax, %rdx; addq $8, %rcx
+.unpack_extract:
+    cmpq $5, %rcx; jb .unpack_loop
+    subq $5, %rcx; movq %rdx, %rax
+    shrq %cl, %rax; andq $0x1F, %rax
+    movb %al, (%r12); incq %r12
+    jmp .unpack_extract
+.unpack_done:
+    leaq Tbuf(%rip), %r12
     leaq Vbuf(%rip), %r13
     xorq %r14, %r14
     xorq %r15, %r15
@@ -67,4 +93,5 @@ Lerr: .asciz "Error\n"
 Lres: .asciz "[%lld]\n"
 .bss
 Lbuf: .space 16384
+Tbuf: .space 16384
 Vbuf: .space 16384
