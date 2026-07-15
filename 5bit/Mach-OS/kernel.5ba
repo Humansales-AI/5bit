@@ -1,0 +1,238 @@
+; kernel.5ba — 5bit VLIW kernel in 5basm notation
+; Assembles to 5bit tokens, runs on the C interpreter.
+; Emits VLIW ops via host capabilities. Grant table = scheduler.
+;
+; Assemble: python3 griddb_asm.py kernel.5ba
+; Run:      ./c/vliw_bootstrap kernel.5b
+
+; === Program DEF ===
+raw START START START START D6 END END END END
+int 200
+
+; === Constants ===
+int 2
+raw START START START START D12 END END END END
+int 219  ; two = 2
+
+int 1
+raw START START START START D12 END END END END
+int 220  ; one = 1
+
+int 0
+raw START START START START D12 END END END END
+int 221  ; zero = 0
+
+int 256
+raw START START START START D12 END END END END
+int 202  ; n = batch_size
+
+int 16
+raw START START START START D12 END END END END
+int 203  ; rounds = 16
+
+; Load header from VLIW memory: mem[1]=n_nodes, mem[4]=fvp, mem[5]=iip, mem[6]=ivp
+int 1
+raw START START START START D7 END END END END
+int 9008  ; CAP_V_LOAD
+raw START START START START D12 END END END END
+int 205  ; nn = mem[1]
+
+int 4
+raw START START START START D7 END END END END
+int 9008
+raw START START START START D12 END END END END
+int 206  ; fvp = mem[4]
+
+int 5
+raw START START START START D7 END END END END
+int 9008
+raw START START START START D12 END END END END
+int 207  ; iip = mem[5]
+
+int 6
+raw START START START START D7 END END END END
+int 9008
+raw START START START START D12 END END END END
+int 208  ; ivp = mem[6]
+
+; r = 0
+int 0
+raw START START START START D12 END END END END
+int 201  ; r = 0
+
+; === Outer LOOP over rounds ===
+raw START START START START D10 END END END END  ; LOOP
+raw LPAREN
+
+; break if r >= rounds
+raw START START START START D13 END END END END  ; READ rounds
+int 203
+raw START START START START D13 END END END END  ; READ r
+int 201
+raw MINUS  ; rounds - r
+raw START START START START D9 END END END END   ; IF
+raw LPAREN raw RPAREN  ; +arm: continue (empty)
+raw LPAREN raw START START START START D11 END END END END raw RPAREN  ; 0arm: BREAK
+raw LPAREN raw START START START START D11 END END END END raw RPAREN  ; -arm: BREAK
+
+; i = 0
+int 0
+raw START START START START D12 END END END END
+int 200  ; i = 0
+
+; === Inner LOOP over batch ===
+raw START START START START D10 END END END END  ; LOOP
+raw LPAREN
+
+; break if i >= n
+raw START START START START D13 END END END END
+int 202
+raw START START START START D13 END END END END
+int 200
+raw MINUS
+raw START START START START D9 END END END END
+raw LPAREN raw RPAREN
+raw LPAREN raw START START START START D11 END END END END raw RPAREN
+raw LPAREN raw START START START START D11 END END END END raw RPAREN
+
+; === BODY: emit VLIW ops ===
+
+; CAP_VLIW_LOAD: idx ← mem[iip + i].  Push addr=(iip+i), dest=210
+raw START START START START D13 END END END END  ; READ iip
+int 207
+raw START START START START D13 END END END END  ; READ i
+int 200
+raw PLUS
+int 210  ; dest = S_idx
+raw START START START START D7 END END END END
+int 9012  ; CAP_VLIW_LOAD
+
+; CAP_VLIW_LOAD: val ← mem[ivp + i]
+raw START START START START D13 END END END END
+int 208
+raw START START START START D13 END END END END
+int 200
+raw PLUS
+int 211  ; dest = S_val
+raw START START START START D7 END END END END
+int 9012
+
+; CAP_VLIW_ALU: tmp = fvp + idx  (op=0 = +)
+int 210  ; src2 = idx
+int 206  ; src1 = fvp
+int 213  ; dest = tmp
+int 0    ; op = +
+raw START START START START D7 END END END END
+int 9011  ; CAP_VLIW_ALU
+
+; CAP_VLIW_LOAD: node ← mem[tmp]
+int 213  ; addr = tmp
+int 212  ; dest = node
+raw START START START START D7 END END END END
+int 9012
+
+; CAP_VLIW_ALU: val = val ^ node  (op=3)
+int 212  ; src2 = node
+int 211  ; src1 = val
+int 211  ; dest = val
+int 3    ; op = ^
+raw START START START START D7 END END END END
+int 9011
+
+; Hash: 6 stages (simplified as ALU ops)
+int 213  ; tmp
+int 211  ; val
+int 211  ; val
+int 0    ; +
+raw START START START START D7 END END END END int 9011
+int 213  ; tmp
+int 211  ; val
+int 211  ; val
+int 0    ; +
+raw START START START START D7 END END END END int 9011
+int 213  ; tmp
+int 211  ; val
+int 211  ; val
+int 0    ; +
+raw START START START START D7 END END END END int 9011
+int 213  ; tmp
+int 211  ; val
+int 211  ; val
+int 0    ; +
+raw START START START START D7 END END END END int 9011
+int 213  ; tmp
+int 211  ; val
+int 211  ; val
+int 0    ; +
+raw START START START START D7 END END END END int 9011
+int 213  ; tmp
+int 211  ; val
+int 211  ; val
+int 0    ; +
+raw START START START START D7 END END END END int 9011
+
+; idx update: parity, inc, idx*2, idx+inc
+int 220  ; one
+int 211  ; val
+int 213  ; tmp
+int 4    ; &
+raw START START START START D7 END END END END int 9011
+int 213  ; tmp
+int 220  ; one
+int 214  ; tmp2
+int 0    ; +
+raw START START START START D7 END END END END int 9011
+int 219  ; two
+int 210  ; idx
+int 210  ; idx
+int 2    ; *
+raw START START START START D7 END END END END int 9011
+int 214  ; tmp2
+int 210  ; idx
+int 210  ; idx
+int 0    ; +
+raw START START START START D7 END END END END int 9011
+
+; CAP_VLIW_STORE: mem[iip+i] = idx
+int 210  ; src = idx
+int 207  ; addr = iip
+raw START START START START D7 END END END END
+int 9013
+
+; CAP_VLIW_STORE: mem[ivp+i] = val
+int 211  ; src = val
+int 208  ; addr = ivp
+raw START START START START D7 END END END END
+int 9013
+
+; i++
+raw START START START START D13 END END END END
+int 200
+raw START START START START D13 END END END END
+int 220
+raw PLUS
+raw START START START START D12 END END END END
+int 200
+
+raw RPAREN  ; end inner LOOP
+
+; r++
+raw START START START START D13 END END END END
+int 201
+raw START START START START D13 END END END END
+int 220
+raw PLUS
+raw START START START START D12 END END END END
+int 201
+
+raw RPAREN  ; end outer LOOP
+
+; EMIT val, idx for verification
+raw START START START START D13 END END END END
+int 211
+raw EQ
+raw START START START START D13 END END END END
+int 210
+raw EQ
+
+record

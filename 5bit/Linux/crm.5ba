@@ -1,0 +1,31 @@
+; crm.5ba — 5bit CRM data logic (contacts + deals)
+; Pure 5bit. No C. No Python.
+; The HTTP server is in the 5bit binary bootstrap (serve mode).
+; This file defines the CRM data structures and handlers.
+;
+; Contact: name, email, phone, company (each stored as a labeled record)
+; Deal: title, value, stage, contact_id
+
+def 1
+; Contact 1: Alice Johnson, alice@acme.com, 555-0100, Acme Corp
+int 0
+raw START START START START D5 END END END END D0 END
+raw START START START START D5 END END END END
+raw START START START START D0 END D1 END D2 END D3 END D4 END END END END
+raw END END END END
+raw START START START START D5 END END END END
+raw END END END END
+raw START START START START D5 END END END END D0 END
+raw END END END END
+
+; Actually — CRM data should be stored as records in the grid.
+; For this demo, we'll embed sample data directly.
+; Contact format: WORD(name) NUM(0) WORD(email) NUM(0) WORD(phone) NUM(0) WORD(company) RECORD
+
+; Contact 1
+raw START raw START raw START raw START raw D5 END END END END
+raw D0 END raw START raw A raw l raw i raw c raw e raw END raw T_POW
+raw J raw o raw h raw n raw s raw o raw n raw END raw END
+record
+
+record

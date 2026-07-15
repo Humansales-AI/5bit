@@ -1,0 +1,158 @@
+; vm_syscall.5ba — VM with file I/O via SYSCALL
+; Opens .5b file, reads it, walks tokens, emits result.
+; Uses SYSCALL (token 15) for open/read. No assembly wrapper needed.
+;
+; Grid layout set by bootstrap:
+;   SLOT_ARGV=60: argv[1] pointer (64-bit, split across two slots)
+;   SLOT_ARGC=62: argc
+;   SLOT_FD=63: file descriptor after open
+;   PROG_BASE=1000: token buffer (read from file)
+;   VSTACK_BASE=2000: value stack
+;
+; The bootstrap (5bit_runner.s) puts argv into slots 60-61, then calls this program.
+; This program does ALL I/O itself via SYSCALL — zero assembly logic.
+
+def 1
+
+; ====== Open the file ======
+; push syscall number (5 = open on macOS)
+int 5
+; push filename pointer (low 32 bits from slot 60)
+raw START START START START DIV END END END END D6 END D0 END
+; push flags (0 = O_RDONLY)
+int 0
+; push mode (0)
+int 0
+; SYSCALL
+raw SYSCALL
+; store fd in slot 63
+raw START START START START MUL END END END END D6 END D3 END
+
+; ====== Read the file ======
+; push syscall number (3 = read)
+int 3
+; push fd (slot 63)
+raw START START START START DIV END END END END D6 END D3 END
+; push buffer address (PROG_BASE = 1000)
+int 1000
+; push count (4096)
+int 4096
+; SYSCALL
+raw SYSCALL
+; rax = bytes read, store in slot 64
+raw START START START START MUL END END END END D6 END D4 END
+
+; ====== Walk tokens on buffer ======
+; Skip pad byte (PROG_BASE+1 is first token)
+; IP = 1 (skip pad)
+int 1
+raw START START START START MUL END END END END D5 END D1 END
+; VSP = VSTACK_BASE
+int 2000
+raw START START START START MUL END END END END D5 END D0 END
+; RESULT = 0
+int 0
+raw START START START START MUL END END END END D5 END D2 END
+
+; === MAIN LOOP ===
+raw PLUS END END END END
+raw LPAREN
+
+  ; Load IP
+  raw START START START START DIV END END END END D5 END D1 END
+  ; Compare with byte count (slot 64): if IP >= N, break
+  raw START START START START DIV END END END END D6 END D4 END
+  raw MINUS
+  raw START START START START D9 END END END END
+  raw LPAREN raw START START START START MINUS END END END END raw RPAREN
+  raw LPAREN raw START START START START MINUS END END END END raw RPAREN
+  raw LPAREN
+
+    ; Load token from PROG_BASE[IP]
+    int 1000
+    raw START START START START DIV END END END END D5 END D1 END
+    raw PLUS
+    ; Read byte at that address — use MOVZX to load a byte
+    raw MOVZX
+
+    ; IP++
+    raw START START START START DIV END END END END D5 END D1 END
+    int 1 raw PLUS
+    raw START START START START MUL END END END END D5 END D1 END
+
+    ; Dispatch on token value
+    ; Check RECORD (28)
+    raw START START START START MUL END END END END D5 END D3 END
+    int 28 raw MINUS
+    raw START START START START D9 END END END END
+    raw LPAREN raw START START START START MINUS END END END END raw RPAREN
+    raw LPAREN raw START START START START MINUS END END END END raw RPAREN
+    raw LPAREN
+
+      ; Check EMIT (14)
+      raw START START START START DIV END END END END D5 END D3 END
+      int 14 raw MINUS
+      raw START START START START D9 END END END END
+      raw LPAREN raw START START START START MINUS END END END END raw RPAREN
+      raw LPAREN raw START START START START MINUS END END END END raw RPAREN
+      raw LPAREN
+
+      raw RPAREN
+      raw RPAREN
+      raw RPAREN
+
+      ; Check PLUS (10)
+      raw START START START START DIV END END END END D5 END D3 END
+      int 10 raw MINUS
+      raw START START START START D9 END END END END
+      raw LPAREN raw START START START START MINUS END END END END raw RPAREN
+      raw LPAREN raw START START START START MINUS END END END END raw RPAREN
+      raw LPAREN
+
+        ; Pop two values from VSTACK, add, push result
+        raw START START START START DIV END END END END D5 END D0 END
+        int 1 raw MINUS
+        raw START START START START MUL END END END END D5 END D0 END
+        int 2000 raw START START START START DIV END END END END D5 END D0 END raw PLUS
+        raw MOVZX
+        raw START START START START MUL END END END END D6 END D4 END
+
+        raw START START START START DIV END END END END D5 END D0 END
+        int 1 raw MINUS
+        raw START START START START MUL END END END END D5 END D0 END
+        int 2000 raw START START START START DIV END END END END D5 END D0 END raw PLUS
+        raw MOVZX
+        raw START START START START MUL END END END END D6 END D5 END
+
+        raw START START START START DIV END END END END D6 END D4 END
+        raw START START START START DIV END END END END D6 END D5 END
+        raw PLUS
+        int 2000 raw START START START START DIV END END END END D5 END D0 END raw PLUS
+        raw MOVB
+        raw START START START START DIV END END END END D5 END D0 END
+        int 1 raw PLUS
+        raw START START START START MUL END END END END D5 END D0 END
+
+      raw RPAREN
+      raw RPAREN
+      raw RPAREN
+
+      ; Else: push digit
+      raw START START START START DIV END END END END D5 END D3 END
+      int 2000 raw START START START START DIV END END END END D5 END D0 END raw PLUS
+      raw MOVB
+      raw START START START START DIV END END END END D5 END D0 END
+      int 1 raw PLUS
+      raw START START START START MUL END END END END D5 END D0 END
+
+    raw RPAREN
+    raw RPAREN
+    raw RPAREN
+
+  raw RPAREN
+raw RPAREN
+
+; Emit result
+raw START START START START DIV END END END END D5 END D2 END
+raw EQ
+record
