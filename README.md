@@ -21,15 +21,15 @@
 | Layer | What it is |
 |---|---|
 | **Lexicon** | 32 five-bit tokens × 5 contexts (NUM, WORD, SPECIAL, SPECIAL2, SPECIAL3). 28 mappable codes + 4 controls. Deterministic encoding — same input produces same bytes, forever. |
-| **Packing** | Width-agnostic transport. 5 × intN carries exactly N tokens. Zero slack. Wire format = storage format = compute format. |
+| **Packing** | Width-agnostic transport. 5 × intN carries exactly N tokens at every rung. Wire format = storage format = compute format. |
 | **5basm** | The notation layer. Text → tokens → packed bytes. Depth-checked, grant-refusing. Round-trips losslessly. |
-| **Ownership** | Encode-time exclusive write grants. Conflicting GRANT_W cannot be encoded — zero tokens produced. Pascal's dream: make wrong programs unrepresentable. |
-| **Interpreter** | 8-verb stack machine (DEF, CALL, RET, three-way IF, LOOP, BREAK, STORE, READ). Programs are records. Code and data share the grid. Three-way IF: all six relations from one MINUS + region placement — zero tokens spent. |
+| **Ownership** | Encode-time exclusive write grants. Conflicting GRANT_W is refused before producing tokens. The violating stream is unrepresentable — wrong programs cannot be written. |
+| **Interpreter** | 8-verb stack machine (DEF, CALL, RET, three-way IF, LOOP, BREAK, STORE, READ). Programs are records at slots. Code and data share the grid. Three-way IF dispatches on sign(t) to three positional regions — all six comparisons from one subtraction + region placement. |
 | **Host (Doorman)** | Slots ≥9000 are host capabilities. CALL to a reserved slot is trapped, grant-checked, and dispatched as a physical effect (clock, hash, socket I/O). The grant table is the ACL for reality. |
 | **Self-Hosting** | The 5bit compiler is written in 5bit. C runs it once. The emitted native compiler then compiles 5bit — including itself. The ladder is kicked. |
 | **Bootstrap** | C interpreter (10/10 test parity) runs on bare metal. No Python in the critical path. C is a historical artifact — the ladder that was climbed once. |
 | **Protocols** | HTTP, WebRTC signaling, SMTP, raw TCP — all unified under one boundary. C handles sockets (the irreducible shell). 5bit handles routing, auth, and handlers natively. |
-| **Native Comparator** | Two records on the grid are two rows of a matrix. XOR is a vertical read. Popcount is counting divergence marks. The grid IS the comparator. Zero opcodes. |
+| **Native Comparator** | Two records on the grid are two rows of a matrix. Column-wise comparison reads divergence directly from aligned lanes. The grid structure provides the comparison geometry — no additional instructions needed. |
 
 5bit is not a database with a query language. It is a **single substrate** where the token format IS the storage format IS the wire format IS the compute format. The bloat was never inside the layers — it was between them. 5bit deleted the seams.
 
