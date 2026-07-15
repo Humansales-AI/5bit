@@ -25,10 +25,11 @@
 | **Packing** | Width-agnostic transport. 5 × intN carries exactly N tokens at every rung. Wire format = storage format = compute format. |
 | **5basm** | The notation layer. Text → tokens → packed bytes. Depth-checked, grant-refusing. Round-trips losslessly. |
 | **Ownership** | Encode-time exclusive write grants. Conflicting GRANT_W is refused before producing tokens. The violating stream is unrepresentable — wrong programs cannot be written. |
-| **Interpreter** | 8-verb stack machine (DEF, CALL, RET, three-way IF, LOOP, BREAK, STORE, READ). Programs are records at slots. Code and data share the grid. Three-way IF dispatches on sign(t) to three positional regions — all six comparisons from one subtraction + region placement. |
+| **Interpreter** | 10-verb stack machine (DEF, CALL, RET, three-way IF, LOOP, BREAK, STORE, READ, LOADX, STOREX). Programs are records at slots. Code and data share the grid. Three-way IF dispatches on sign(t) to three positional regions — all six comparisons from one subtraction + region placement. |
+| **Compiler** | 5bit→x86-64 native compiler (9192 tokens, 25 opcodes). Emits mov, push/pop, add/sub/imul/idiv, and/or/xor/shl/shr/not, popcnt, movzx/movb, syscall, call/ret, cmp+jg/je/jmp. SYSCALL emission evicts C from the doorman. |
 | **Host (Doorman)** | Slots ≥9000 are host capabilities. CALL to a reserved slot is trapped, grant-checked, and dispatched as a physical effect (clock, hash, socket I/O). The grant table is the ACL for reality. |
-| **Self-Hosting** | The 5bit compiler is written in 5bit. C runs it once. The emitted native compiler then compiles 5bit — including itself. The ladder is kicked. |
-| **Bootstrap** | C interpreter (10/10 test parity) runs on bare metal. No Python in the critical path. C is a historical artifact — the ladder that was climbed once. |
+| **Self-Hosting** | The 5bit compiler compiles itself. Hand-written 259B x86-64 VM runs the compiler once. Emitted native compiler then compiles 5bit — including itself. The ladder is kicked. |
+| **Bootstrap** | 80B mmap header + 259B hand-written VM + 5745B compiler tokens = 6086B standalone binary. Zero C in the critical path. Python was the file-writer, not the runtime. |
 | **Protocols** | HTTP, WebRTC signaling, SMTP, raw TCP — all unified under one boundary. C handles sockets (the irreducible shell). 5bit handles routing, auth, and handlers natively. |
 | **Native Comparator** | Two records on the grid are two rows of a matrix. Column-wise comparison reads divergence directly from aligned lanes. The grid structure provides the comparison geometry — no additional instructions needed. |
 
