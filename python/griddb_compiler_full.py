@@ -292,8 +292,36 @@ def _dispatch_current():
                                                                 region(
                                                                     verb(CMD_READ, TK), num(15), [MINUS],
                                                                     verb(CMD_IF),
-                                                                    region(*_compile_verbs()),    # +arm: TK > 15 → verbs
-                                                                    region(*_compile_syscall()),  # 0arm: TK == 15 = SYSCALL
+                                                                    # +arm: TK > 15 → chain 16-24 (AND OR XOR SHL SHR NOT POPCNT MOVZX MOVB)
+                                                                    region(
+                                                                        verb(CMD_READ, TK), num(16), [MINUS], verb(CMD_IF),
+                                                                        region(verb(CMD_READ, TK), num(17), [MINUS], verb(CMD_IF),
+                                                                            region(verb(CMD_READ, TK), num(18), [MINUS], verb(CMD_IF),
+                                                                                region(verb(CMD_READ, TK), num(19), [MINUS], verb(CMD_IF),
+                                                                                    region(verb(CMD_READ, TK), num(20), [MINUS], verb(CMD_IF),
+                                                                                        region(verb(CMD_READ, TK), num(21), [MINUS], verb(CMD_IF),
+                                                                                            region(verb(CMD_READ, TK), num(22), [MINUS], verb(CMD_IF),
+                                                                                                region(verb(CMD_READ, TK), num(23), [MINUS], verb(CMD_IF),
+                                                                                                    region(verb(CMD_READ, TK), num(24), [MINUS], verb(CMD_IF),
+                                                                                                        region(*_compile_verbs()),
+                                                                                                        region(*_compile_movb()),
+                                                                                                        region()),
+                                                                                                    region(*_compile_movzx()),
+                                                                                                    region()),
+                                                                                                region(*_compile_popcnt()),
+                                                                                                region()),
+                                                                                            region(*_compile_not()),
+                                                                                            region()),
+                                                                                        region(*_compile_shr()),
+                                                                                        region()),
+                                                                                    region(*_compile_shl()),
+                                                                                    region()),
+                                                                                region(*_compile_xor()),
+                                                                                region()),
+                                                                            region(*_compile_or()),
+                                                                            region()),
+                                                                        region(*_compile_and()),
+                                                                        region()),
                                                                     region(),
                                                                 ),
                                                                 region(*_compile_emit()),   # 0arm: TK == 14 = EMIT
@@ -390,24 +418,49 @@ def _compile_emit():
     return emit_bytes(insn_pop_rax() + insn_ret())
 
 def _compile_syscall():
-    """Pop 4 values (syscall_num, arg1, arg2, arg3) from value stack,
-    set up registers, issue syscall, push return value.
-    Stack order: TOS=syscall_num, then arg1, arg2, arg3 below.
-    So we pop: rbx=num, rdi=arg1, rsi=arg2, rdx=arg3.
-    Then: mov rax, rbx; syscall; push rax."""
+    """Pop 4 values, set up registers, issue syscall, push return value."""
     return emit_bytes([
-        0x5B,             # pop rbx        ; syscall number
-        0x58,             # pop rax
-        0x48, 0x97,       # xchg rax, rdi  ; rdi = arg1
-        0x58,             # pop rax
-        0x48, 0x96,       # xchg rax, rsi  ; rsi = arg2
-        0x58,             # pop rax
-        0x48, 0x92,       # xchg rax, rdx  ; rdx = arg3
-        0x53,             # push rbx
-        0x58,             # pop rax        ; rax = syscall number
-        0x0F, 0x05,       # syscall
-        0x50,             # push rax       ; return value
+        0x5B, 0x58, 0x48, 0x97, 0x58, 0x48, 0x96,
+        0x58, 0x48, 0x92, 0x53, 0x58, 0x0F, 0x05, 0x50,
     ])
+
+# ── Bitwise operators (tokens 16-24) ──────────────────────────────────────
+
+def _compile_and():
+    """pop rbx; pop rax; and rax, rbx; push rax"""
+    return emit_bytes([0x5B, 0x58, 0x48, 0x21, 0xD8, 0x50])
+
+def _compile_or():
+    """pop rbx; pop rax; or rax, rbx; push rax"""
+    return emit_bytes([0x5B, 0x58, 0x48, 0x09, 0xD8, 0x50])
+
+def _compile_xor():
+    """pop rbx; pop rax; xor rax, rbx; push rax"""
+    return emit_bytes([0x5B, 0x58, 0x48, 0x31, 0xD8, 0x50])
+
+def _compile_shl():
+    """pop rcx; pop rax; shl rax, cl; push rax"""
+    return emit_bytes([0x59, 0x58, 0x48, 0xD3, 0xE0, 0x50])
+
+def _compile_shr():
+    """pop rcx; pop rax; sar rax, cl; push rax"""
+    return emit_bytes([0x59, 0x58, 0x48, 0xD3, 0xF8, 0x50])
+
+def _compile_not():
+    """pop rax; not rax; push rax"""
+    return emit_bytes([0x58, 0x48, 0xF7, 0xD0, 0x50])
+
+def _compile_popcnt():
+    """pop rax; popcnt rax, rax; push rax"""
+    return emit_bytes([0x58, 0xF3, 0x48, 0x0F, 0xB8, 0xC0, 0x50])
+
+def _compile_movzx():
+    """pop rax; movzx rax, byte [rax]; push rax  (byte load from arena)"""
+    return emit_bytes([0x58, 0x48, 0x0F, 0xB6, 0x00, 0x50])
+
+def _compile_movb():
+    """pop rbx (addr); pop rax (value); mov [rbx], al; push rax  (byte store to arena)"""
+    return emit_bytes([0x5B, 0x58, 0x88, 0x03, 0x50])
 
 def _compile_verbs():
     """Dispatch on V_IF=9, V_LOOP=10, V_BREAK=11, V_STORE=12, V_READ=13, V_CALL=7, V_RET=8
