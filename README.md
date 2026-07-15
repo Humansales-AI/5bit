@@ -1,71 +1,37 @@
-# 5bit — The 5‑Bit Deterministic Binary Database
-
-**Same bytes everywhere. Python ≡ TypeScript. 53/53 cross-language conformance, zero mismatches.**
+# 5bit
 
 ```
-npm install fivebit-client
-```
-
-```typescript
-import { createClient } from 'fivebit-client'
-
-const db = createClient({ url: 'http://localhost:8080' })
-
-// Auth — email/password + OAuth (Google, GitHub)
-await db.auth.signUp('alice@example.com', 'password123')
-await db.auth.signInWithOAuth('google', { idToken: googleToken })
-
-// Typed CRUD with ETag caching + conditional GETs
-const users = db.from('users')
-await users.insert({ name: 'Alice', balance: 100 })
-const alice = await users.getById(1)  // 304 on repeat
-
-// Aggregates — count, sum, avg, min, max with filters
-await users.count('age:gt:21')
-await users.avg('balance', 'age:gt:21')
-
-// Content-addressed storage — SHA-256 dedup
-const bucket = db.storage.bucket('avatars')
-await bucket.upload('alice.png', fileBuffer)
-
-// Realtime — WebSocket with presence + channels
-db.onChanges('users', (record) => console.log('changed:', record))
-const chat = db.channel('room')
-chat.broadcast({ text: 'hello' })
-chat.presence(1, 'Alice')  // "who's online"
+ █████████╗ ██████╗  ██╗ ██████╗ ██╗ ████████╗
+ ╚══██╔══╝ ██╔══██╗ ██║ ██╔══██╗██║ ╚══██╔══╝
+    ██║    ██████╔╝ ██║ ██████╔╝██║    ██║
+    ██║    ██╔══██╗ ██║ ██╔══██╗██║    ██║
+    ██║    ██║  ██║ ██║ ██████╔╝██║    ██║
+    ╚═╝    ╚═╝  ╚═╝ ╚═╝ ╚═════╝ ╚═╝    ╚═╝
+                                            
+  VM · DB · Language · Runtime · Compiler
+    32 tokens. 5 bits. One substrate.
 ```
 
 ---
 
-## What is this?
+## What is 5bit?
 
-A database architecture built entirely upon **5‑bit binary tokens**. 32 deterministic codes that represent signed integers, English text, arithmetic operators, decimal scaling, and control commands — all within a single flat, append-only bitstream. No SQL parser. No variable-length encoding. No floating-point mantissas. No schema.
+5bit is a **self-hosting computational substrate**. It is a database, a virtual machine, a programming language, a compiler, and a protocol engine — all built from a single 32-token, 5-bit alphabet. Every layer speaks the same tongue. There are no seams.
 
-Storage is a **bit‑addressable binary grid**. Records live at known positions: `record_id × STRIDE` bits. Access is O(1) — seek + read, no B-tree, no index, no scan. Relationships between records are derived natively via **Hamming distance** (address proximity) and **Manhattan distance** (value proximity), rendering traditional relational joins and indexes obsolete.
+| Layer | What it is |
+|---|---|
+| **Lexicon** | 32 five-bit tokens × 5 contexts (NUM, WORD, SPECIAL, SPECIAL2, SPECIAL3). 28 mappable codes + 4 controls. Deterministic encoding — same input produces same bytes, forever. |
+| **Packing** | Width-agnostic transport. 5 × intN carries exactly N tokens. Zero slack. Wire format = storage format = compute format. |
+| **5basm** | The notation layer. Text → tokens → packed bytes. Depth-checked, grant-refusing. Round-trips losslessly. |
+| **Ownership** | Encode-time exclusive write grants. Conflicting GRANT_W cannot be encoded — zero tokens produced. Pascal's dream: make wrong programs unrepresentable. |
+| **Interpreter** | 8-verb stack machine (DEF, CALL, RET, three-way IF, LOOP, BREAK, STORE, READ). Programs are records. Code and data share the grid. Three-way IF: all six relations from one MINUS + region placement — zero tokens spent. |
+| **Host (Doorman)** | Slots ≥9000 are host capabilities. CALL to a reserved slot is trapped, grant-checked, and dispatched as a physical effect (clock, hash, socket I/O). The grant table is the ACL for reality. |
+| **Self-Hosting** | The 5bit compiler is written in 5bit. C runs it once. The emitted native compiler then compiles 5bit — including itself. The ladder is kicked. |
+| **Bootstrap** | C interpreter (10/10 test parity) runs on bare metal. No Python in the critical path. C is a historical artifact — the ladder that was climbed once. |
+| **Protocols** | HTTP, WebRTC signaling, SMTP, raw TCP — all unified under one boundary. C handles sockets (the irreducible shell). 5bit handles routing, auth, and handlers natively. |
+| **Native Comparator** | Two records on the grid are two rows of a matrix. XOR is a vertical read. Popcount is counting divergence marks. The grid IS the comparator. Zero opcodes. |
 
----
-
-## Why believe this
-
-Two provable results you can reproduce in one command:
-
-**Cross-language determinism:** 53 test vectors — integers, bigints, mixed-case words, SPECIAL2 punctuation, SPECIAL3 commands — produce bit-identical packed bytes in Python and TypeScript. A record written on one engine reads byte-correct on the other. Same input = same bytes everywhere.
-
-```bash
-./conformance.sh   # 53 pass, 0 fail — Python ≡ TypeScript, bit for bit
-```
-
-**Canonical compaction:** Write the same history on both engines, compact them, and the resulting files are byte-identical (SHA-256 `090def36…` on both sides). Same logical content → same bytes, any engine, any language.
-
-```bash
-./verify.sh   # conformance + canonical compaction, exits non-zero on mismatch
-```
-
-**Native geometry on the fabric:** A transformer with a 32-token embedding table (1,024 floats) learns Manhattan distance directly from raw 5-bit token streams — no schema, no query planner, no feature engineering.
-
-```bash
-python3 examples/grid_transformer.py   # trained in seconds, queries the grid via attention
-```
+5bit is not a database with a query language. It is a **single substrate** where the token format IS the storage format IS the wire format IS the compute format. The bloat was never inside the layers — it was between them. 5bit deleted the seams.
 
 ---
 
