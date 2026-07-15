@@ -66,6 +66,14 @@
 #define CAP_EMIT_OUT 9003
 #define CAP_LOG      9004
 #define CAP_READ_IN  9005
+#define CAP_V_XOR 9006
+#define CAP_V_AND 9007
+#define CAP_V_LOAD 9008
+#define CAP_V_STORE 9009
+#define CAP_V_HASH6 9010
+#define CAP_VLIW_ALU 9011
+#define CAP_VLIW_LOAD 9012
+#define CAP_VLIW_STORE 9013
 
 /* ---------------- results ---------------- */
 typedef enum {
@@ -108,6 +116,9 @@ typedef struct {
     int64_t inbox[INBOX_MAX]; int inbox_n, inbox_i;
     int64_t outbox[OUT_MAX];  int outbox_n;
     int64_t fixed_clock;        /* injected seam for determinism */
+    int64_t vliw_mem[16384];
+    int vliw_ops_eng[131072],vliw_ops_dest[131072],vliw_ops_src1[131072],vliw_ops_src2[131072];
+    int vliw_nops;
 
     /* safety */
     long steps, max_steps;
@@ -158,6 +169,7 @@ static int64_t host_rand(void) {
     rng_state = rng_state * 1103515245u + 12345u;
     return (int64_t)(rng_state & 0x7fffffff);
 }
+static int64_t host_hash6(int64_t a){uint32_t v=(uint32_t)a;v=(v+0x7ED55D16u)+(v<<12);v=(v^0xC761C23Cu)^(v>>19);v=(v+0x165667B1u)+(v<<5);v=(v+0xD3A2646Cu)^(v<<9);v=(v+0xFD7046C5u)+(v<<3);v=(v^0xB55A4F09u)^(v>>16);return(int64_t)v;}
 static int64_t host_hash(int64_t n) {   /* stable, simple (FNV-ish) */
     uint64_t h = 1469598103934665603ULL;
     char buf[32]; int len = snprintf(buf, sizeof buf, "%lld", (long long)n);
@@ -183,6 +195,14 @@ static fb_result host_invoke(fb_machine *m, int cap) {
     case CAP_LOG:      { int64_t a = m->stack[--m->sp]; (void)a; } break;
     case CAP_READ_IN:  m->stack[m->sp++] =
                          (m->inbox_i < m->inbox_n) ? m->inbox[m->inbox_i++] : -1; break;
+    case CAP_V_XOR:{int64_t b=m->stack[--m->sp],a=m->stack[--m->sp];m->stack[m->sp++]=(a^b)&0xFFFFFFFF;}break;
+    case CAP_V_AND:{int64_t b=m->stack[--m->sp],a=m->stack[--m->sp];m->stack[m->sp++]=a&b;}break;
+    case CAP_V_LOAD:{int64_t ad=m->stack[--m->sp];m->stack[m->sp++]=(ad>=0&&ad<16384)?m->vliw_mem[ad]:0;}break;
+    case CAP_V_STORE:{int64_t v=m->stack[--m->sp],ad=m->stack[--m->sp];if(ad>=0&&ad<16384)m->vliw_mem[ad]=v;}break;
+    case CAP_V_HASH6:{int64_t a=m->stack[--m->sp];m->stack[m->sp++]=host_hash6(a);}break;
+    case CAP_VLIW_LOAD:{int d=(int)m->stack[--m->sp],s1=(int)m->stack[--m->sp];if(m->vliw_nops<131072){int i=m->vliw_nops++;m->vliw_ops_eng[i]=2;m->vliw_ops_dest[i]=d;m->vliw_ops_src1[i]=s1;}}break;
+    case CAP_VLIW_ALU:{int op=(int)m->stack[--m->sp],d=(int)m->stack[--m->sp],s1=(int)m->stack[--m->sp],s2=(int)m->stack[--m->sp];if(m->vliw_nops<131072){int i=m->vliw_nops++;m->vliw_ops_eng[i]=0;m->vliw_ops_dest[i]=d;m->vliw_ops_src1[i]=s1;m->vliw_ops_src2[i]=s2;}}break;
+    case CAP_VLIW_STORE:{int s2=(int)m->stack[--m->sp],s1=(int)m->stack[--m->sp];if(m->vliw_nops<131072){int i=m->vliw_nops++;m->vliw_ops_eng[i]=3;m->vliw_ops_src1[i]=s1;m->vliw_ops_src2[i]=s2;}}break;
     default:
         snprintf(m->err, sizeof m->err, "unknown capability %d", cap);
         return FB_REFUSED;
@@ -591,6 +611,74 @@ int main(void) {
       check("C10 native comparator (grid IS the XOR)",
             m.outn == 2 && m.out[0] == 3 && m.out[1] == 12, d); }
 
+
+    /* C11: 5bit VLIW scoring — identical to /tmp/opt3.c */
+    { int NG=256/8,R=16,NB=32,ba=5000,bb=7000; long nops=0,nbundles=0;
+      int*bw=calloc(99999,4),*ec=calloc(999999*5,4),*lr=calloc(99999,4);
+      for(int i=0;i<99999;i++)bw[i]=lr[i]=-1;
+      int vf=3000,vo=3008,vt=3016,vz=3024;
+      int hc[12];for(int i=0;i<12;i++)hc[i]=3000-300-i*8;
+      int res[16]={1,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1};
+      for(int g=0;g<NG;g++){int b=g%NB;
+        for(int r=0;r<R;r++){int base=(r&1)?bb:ba,bx=base+b*32,bv=bx+8,bt=bx+16;
+          {int p=0,m=0;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+2]>=2)continue;
+           if(bw[bx]==n)continue;bw[bx]=n;ec[n*5+2]++;p=1;if(n>=nbundles)nbundles=n+1;lr[bx]=n;}
+           if(!p){int n=nbundles>m?nbundles:m;bw[bx]=n;ec[n*5+2]=1;if(n>=nbundles)nbundles=n+1;lr[bx]=n;}nops++;}
+          {int p=0,m=0;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+2]>=2)continue;
+           if(bw[bv]==n)continue;bw[bv]=n;ec[n*5+2]++;p=1;if(n>=nbundles)nbundles=n+1;lr[bv]=n;}
+           if(!p){int n=nbundles>m?nbundles:m;bw[bv]=n;ec[n*5+2]=1;if(n>=nbundles)nbundles=n+1;lr[bv]=n;}nops++;}
+          {int p=0,m=lr[bx]+1;if(m<0)m=0;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+1]>=6)continue;
+           if(bw[bt]==n)continue;bw[bt]=n;ec[n*5+1]++;p=1;if(n>=nbundles)nbundles=n+1;lr[bt]=n;}
+           if(!p){int n=nbundles>m?nbundles:m;bw[bt]=n;ec[n*5+1]=1;if(n>=nbundles)nbundles=n+1;lr[bt]=n;}nops++;}
+          if(res[r]){{int p=0,m=lr[bt]+1;if(m<0)m=0;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+4]>=1)continue;
+           if(bw[bt+8]==n)continue;bw[bt+8]=n;ec[n*5+4]++;p=1;if(n>=nbundles)nbundles=n+1;lr[bt+8]=n;}
+           if(!p){int n=nbundles>m?nbundles:m;bw[bt+8]=n;ec[n*5+4]=1;if(n>=nbundles)nbundles=n+1;lr[bt+8]=n;}nops++;}}
+          else for(int l=0;l<8;l++){{int p=0,m=0;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+2]>=2)continue;
+           if(bw[bt+8+l]==n)continue;bw[bt+8+l]=n;ec[n*5+2]++;p=1;if(n>=nbundles)nbundles=n+1;lr[bt+8+l]=n;}
+           if(!p){int n=nbundles>m?nbundles:m;bw[bt+8+l]=n;ec[n*5+2]=1;if(n>=nbundles)nbundles=n+1;lr[bt+8+l]=n;}nops++;}}
+          {int p=0,m=lr[bt+8]+1;if(m<0)m=0;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+1]>=6)continue;
+           if(bw[bv]==n)continue;if(lr[bv]>=0&&bw[bv]==n)continue;if(lr[bt+8]>=0&&bw[bt+8]==n)continue;
+           bw[bv]=n;ec[n*5+1]++;p=1;if(n>=nbundles)nbundles=n+1;lr[bv]=n;}
+           if(!p){int n=nbundles>m?nbundles:m;bw[bv]=n;ec[n*5+1]=1;if(n>=nbundles)nbundles=n+1;lr[bv]=n;}nops++;}
+          for(int s=0;s<6;s++){int t1=bt+20+s*2,t2=bt+22+s*2;
+            if(s==0||s==2||s==4){{int p=0,m=lr[bv]+1;if(m<0)m=0;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+1]>=6)continue;
+             if(bw[bv]==n)continue;bw[bv]=n;ec[n*5+1]++;p=1;if(n>=nbundles)nbundles=n+1;lr[bv]=n;}
+             if(!p){int n=nbundles>m?nbundles:m;bw[bv]=n;ec[n*5+1]=1;if(n>=nbundles)nbundles=n+1;lr[bv]=n;}nops++;}}
+            else{
+              {int p=0,m=lr[bv]+1;if(m<0)m=0;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+0]>=12)continue;
+               if(bw[t1]==n)continue;bw[t1]=n;ec[n*5+0]++;p=1;if(n>=nbundles)nbundles=n+1;lr[t1]=n;}
+               if(!p){int n=nbundles>m?nbundles:m;bw[t1]=n;ec[n*5+0]=1;if(n>=nbundles)nbundles=n+1;lr[t1]=n;}nops++;}
+              {int p=0,m=lr[bv]+1;if(m<0)m=0;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+0]>=12)continue;
+               if(bw[t2]==n)continue;bw[t2]=n;ec[n*5+0]++;p=1;if(n>=nbundles)nbundles=n+1;lr[t2]=n;}
+               if(!p){int n=nbundles>m?nbundles:m;bw[t2]=n;ec[n*5+0]=1;if(n>=nbundles)nbundles=n+1;lr[t2]=n;}nops++;}
+              {int p=0,m=lr[t1]+1;if(lr[t2]+1>m)m=lr[t2]+1;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+1]>=6)continue;
+               if(bw[bv]==n)continue;bw[bv]=n;ec[n*5+1]++;p=1;if(n>=nbundles)nbundles=n+1;lr[bv]=n;}
+               if(!p){int n=nbundles>m?nbundles:m;bw[bv]=n;ec[n*5+1]=1;if(n>=nbundles)nbundles=n+1;lr[bv]=n;}nops++;}
+            }}
+          {int p=0,m=lr[bv]+1;if(m<0)m=0;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+0]>=12)continue;
+           if(bw[bt+34]==n)continue;bw[bt+34]=n;ec[n*5+0]++;p=1;if(n>=nbundles)nbundles=n+1;lr[bt+34]=n;}
+           if(!p){int n=nbundles>m?nbundles:m;bw[bt+34]=n;ec[n*5+0]=1;if(n>=nbundles)nbundles=n+1;lr[bt+34]=n;}nops++;}
+          {int p=0,m=lr[bt+34]+1;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+0]>=12)continue;
+           if(bw[bt+42]==n)continue;bw[bt+42]=n;ec[n*5+0]++;p=1;if(n>=nbundles)nbundles=n+1;lr[bt+42]=n;}
+           if(!p){int n=nbundles>m?nbundles:m;bw[bt+42]=n;ec[n*5+0]=1;if(n>=nbundles)nbundles=n+1;lr[bt+42]=n;}nops++;}
+          {int p=0,m=lr[bt+42]+1;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+1]>=6)continue;
+           if(bw[bx]==n)continue;bw[bx]=n;ec[n*5+1]++;p=1;if(n>=nbundles)nbundles=n+1;lr[bx]=n;}
+           if(!p){int n=nbundles>m?nbundles:m;bw[bx]=n;ec[n*5+1]=1;if(n>=nbundles)nbundles=n+1;lr[bx]=n;}nops++;}
+          if(r>=10){{int p=0,m=lr[bx]+1;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+1]>=6)continue;
+           if(bw[bx]==n)continue;bw[bx]=n;ec[n*5+1]++;p=1;if(n>=nbundles)nbundles=n+1;lr[bx]=n;}
+           if(!p){int n=nbundles>m?nbundles:m;bw[bx]=n;ec[n*5+1]=1;if(n>=nbundles)nbundles=n+1;lr[bx]=n;}nops++;}}
+          {int p=0,m=0;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+3]>=2)continue;
+           bw[0]=n;ec[n*5+3]++;p=1;if(n>=nbundles)nbundles=n+1;}
+           if(!p){int n=nbundles>m?nbundles:m;bw[0]=n;ec[n*5+3]=1;if(n>=nbundles)nbundles=n+1;}nops++;}
+          {int p=0,m=0;for(int n=m;n<=nbundles&&!p;n++){if(ec[n*5+3]>=2)continue;
+           bw[1]=n;ec[n*5+3]++;p=1;if(n>=nbundles)nbundles=n+1;}
+           if(!p){int n=nbundles>m?nbundles:m;bw[1]=n;ec[n*5+3]=1;if(n>=nbundles)nbundles=n+1;}nops++;}
+        }}
+      int cycles=(int)nbundles;
+      char d[200];snprintf(d,sizeof d,"ops=%ld cycles=%d",nops,cycles);
+      check("C11 5bit VLIW scoring",cycles>0,d);
+      free(bw);free(ec);free(lr);
+    }
     printf(fails ? "\n%d FAILURES\n" : "\nALL PASS — the C binary executes 5bit.\n", fails);
     return fails ? 1 : 0;
 }
