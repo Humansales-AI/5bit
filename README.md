@@ -105,28 +105,36 @@ Four contexts, same 32 binary codes. 28 mappable slots each (00000–11011). Fou
 | `11110` | **END** | **END** | **END** | **END** | **END** |
 | `11111` | **START** | **START** | **START** | **START** | **START** |
 
-### Compiler opcode map (NUM tokens 15-24)
+### Full NUM context — compiler emission targets
 
-The 5bit→x86-64 compiler maps NUM token values to x86-64 instructions.
-These are application-level conventions — the compiler's three-way IF
-dispatch chain selects the handler:
+Every NUM token (0-31) maps to a specific x86-64 instruction sequence
+when processed by compiler.5b. This is the complete table:
 
-| Token | Name | Operation |
+| Token | Name | What the compiler emits |
 |---|---|---|
-| 15 | SYSCALL | kernel call (pop 4 args, syscall, push result) |
-| 16 | AND | bitwise AND |
-| 17 | OR | bitwise OR |
-| 18 | XOR | bitwise XOR |
-| 19 | SHL | shift left |
-| 20 | SHR | arithmetic shift right |
-| 21 | NOT | bitwise NOT |
-| 22 | POPCNT | population count (Hamming distance) |
-| 23 | MOVZX | byte load from arena |
-| 24 | MOVB | byte store to arena |
+| 0-9 | D0-D9 | `mov rax, imm; push rax` — integer literal |
+| 10 | PLUS | `pop rbx; pop rax; add rax, rbx; push rax` |
+| 11 | MINUS | `pop rbx; pop rax; sub rax, rbx; push rax` |
+| 12 | MUL | `pop rbx; pop rax; imul rax, rbx; push rax` |
+| 13 | DIV | `pop rbx; pop rax; cqo; idiv rbx; push rax` |
+| 14 | EMIT | `pop rax; ret` — returns the value to caller |
+| 15 | SYSCALL | pop 4 args → registers → `syscall` → push result |
+| 16 | AND | pop 2 values → `and` → push result |
+| 17 | OR | pop 2 values → `or` → push result |
+| 18 | XOR | pop 2 values → `xor` → push result |
+| 19 | SHL | pop shift count, value → `shl` → push result |
+| 20 | SHR | pop shift count, value → `sar` → push result |
+| 21 | NOT | pop value → `not` → push result |
+| 22 | POPCNT | pop value → `popcnt` → push result |
+| 23 | MOVZX | pop address → `movzx byte [addr]` → push result |
+| 24 | MOVB | pop address, value → `mov [addr], al` |
+| 25-27 | — | banked (3 slots available) |
+| 28 | RECORD | end of program (implicit ret) |
+| 29 | CHECKSUM | integrity marker (no-op at runtime) |
+| 30 | END | value finalizer / context pop |
+| 31 | START | context push |
 
-Tokens 0-9 emit integer literals. 10-13 emit `+ - * /`. 14 emits
-`EMIT` (return). 15-24 above. The compiler is 9192 tokens, verified
-with XOR and AND.
+The compiler is 9192 tokens. Verified: XOR(18), AND(16), arithmetic(10-13), EMIT(14).
 
 ---
 
