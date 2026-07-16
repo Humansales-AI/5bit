@@ -66,44 +66,50 @@
 
 ---
 
-## The 32‑Token Lexicon — Five Contexts
+## The 32‑Token Lexicon — Complete Table
 
-Four contexts, same 32 binary codes. 28 mappable slots each (00000–11011). Four controls (11100–11111) retain meaning across all contexts. SPECIAL3 maps the same 28 slots to control commands instead of characters — token-level permissions in the fabric itself.
+Six columns. The official lexicon: order (decimal), binary, five contexts, and the
+5basm shorthand (the token name you write in `.5ba` source files). Columns 5-6
+are the compiler opcodes — they map to x86-64 instructions.
 
-| Binary  | NUM | WORD | SPECIAL | SPECIAL2 | SPECIAL3 |
-|:-------:|:---:|:----:|:-------:|:--------:|:--------:|
-| `00000` | `0` | `A`  | `a`     | `!`      | `AUTH`   |
-| `00001` | `1` | `B`  | `b`     | `"`      | `GRANT_R`|
-| `00010` | `2` | `C`  | `c`     | `#`      | `GRANT_W`|
-| `00011` | `3` | `D`  | `d`     | `$`      | `REVOKE` |
-| `00100` | `4` | `E`  | `e`     | `%`      | `ENCRYPT`|
-| `00101` | `5` | `F`  | `f`     | `&`      | `LABEL`  |
-| `00110` | `6` | `G`  | `g`     | `'`      | `DEF`    |
-| `00111` | `7` | `H`  | `h`     | `(`      | `CALL`   |
-| `01000` | `8` | `I`  | `i`     | `)`      | `RET`    |
-| `01001` | `9` | `J`  | `j`     | `*`      | `IF`     |
-| `01010` | `+` | `K`  | `k`     | `+`      | `LOOP`   |
-| `01011` | `-` | `L`  | `l`     | `,`      | `BREAK`  |
-| `01100` | `*` | `M`  | `m`     | `/`      | `STORE`  |
-| `01101` | `/` | `N`  | `n`     | `:`      | `READ`   |
-| `01110` | `=` | `O`  | `o`     | `;`      | `EMIT`   |
-| `01111` | `(` | `P`  | `p`     | `<`      | `SYSCALL`|
-| `10000` | `)` | `Q`  | `q`     | `=`      | `AND`    |
-| `10001` | `-1`| `R`  | `r`     | `>`      | `OR`     |
-| `10010` | `-2`| `S`  | `s`     | `?`      | `XOR`    |
-| `10011` | `-3`| `T`  | `t`     | `[`      | `SHL`    |
-| `10100` | `-4`| `U`  | `u`     | `\`      | `SHR`    |
-| `10101` | `-5`| `V`  | `v`     | `]`      | `NOT`    |
-| `10110` | `-6`| `W`  | `w`     | `^`      | `POPCNT` |
-| `10111` | `-7`| `X`  | `x`     | `_`      | `MOVZX`  |
-| `11000` | `-8`| `Y`  | `y`     | `` ` ``  | `MOVB`   |
-| `11001` | `-9`| `Z`  | `z`     | `{`      | `—`      |
-| `11010` | `^` | `␣`  | `@`     | `\|`     | `—`      |
-| `11011` | `S` | `.`  | `-`     | `}`      | `—`      |
-| `11100` | **RECORD** | **RECORD** | **RECORD** | **RECORD** | **RECORD** |
-| `11101` | **CHECKSUM** | **CHECKSUM** | **CHECKSUM** | **CHECKSUM** | **CHECKSUM** |
-| `11110` | **END** | **END** | **END** | **END** | **END** |
-| `11111` | **START** | **START** | **START** | **START** | **START** |
+| #  | Binary  | NUM | WORD | SPECIAL | SPECIAL2 | SPECIAL3 | 5basm name |
+|:--:|:-------:|:---:|:----:|:-------:|:--------:|:--------:|:----------:|
+| 0  | `00000` | `0` | `A`  | `a`     | `!`      | `AUTH`   | `AUTH` |
+| 1  | `00001` | `1` | `B`  | `b`     | `"`      | `GRANT_R`| `GRANT_R` |
+| 2  | `00010` | `2` | `C`  | `c`     | `#`      | `GRANT_W`| `GRANT_W` |
+| 3  | `00011` | `3` | `D`  | `d`     | `$`      | `REVOKE` | `REVOKE` |
+| 4  | `00100` | `4` | `E`  | `e`     | `%`      | `ENCRYPT`| `ENCRYPT` |
+| 5  | `00101` | `5` | `F`  | `f`     | `&`      | `LABEL`  | `LABEL` |
+| 6  | `00110` | `6` | `G`  | `g`     | `'`      | `DEF`    | `DEF` |
+| 7  | `00111` | `7` | `H`  | `h`     | `(`      | `CALL`   | `CALL` |
+| 8  | `01000` | `8` | `I`  | `i`     | `)`      | `RET`    | `RET` |
+| 9  | `01001` | `9` | `J`  | `j`     | `*`      | `IF`     | `IF` |
+| 10 | `01010` | `+` | `K`  | `k`     | `+`      | `LOOP`   | `LOOP / PLUS` |
+| 11 | `01011` | `-` | `L`  | `l`     | `,`      | `BREAK`  | `BREAK / MINUS` |
+| 12 | `01100` | `*` | `M`  | `m`     | `/`      | `STORE`  | `STORE / MUL` |
+| 13 | `01101` | `/` | `N`  | `n`     | `:`      | `READ`   | `READ / DIV` |
+| 14 | `01110` | `=` | `O`  | `o`     | `;`      | `EMIT`   | `EMIT / EQ` |
+| 15 | `01111` | `(` | `P`  | `p`     | `<`      | `SYSCALL`| `SYSCALL / LPAREN` |
+| 16 | `10000` | `)` | `Q`  | `q`     | `=`      | `AND`    | `AND / RPAREN` |
+| 17 | `10001` | `-1`| `R`  | `r`     | `>`      | `OR`     | `OR / N1` |
+| 18 | `10010` | `-2`| `S`  | `s`     | `?`      | `XOR`    | `XOR / N2` |
+| 19 | `10011` | `-3`| `T`  | `t`     | `[`      | `SHL`    | `SHL / N3` |
+| 20 | `10100` | `-4`| `U`  | `u`     | `\`      | `SHR`    | `SHR / N4` |
+| 21 | `10101` | `-5`| `V`  | `v`     | `]`      | `NOT`    | `NOT / N5` |
+| 22 | `10110` | `-6`| `W`  | `w`     | `^`      | `POPCNT` | `POPCNT / N6` |
+| 23 | `10111` | `-7`| `X`  | `x`     | `_`      | `MOVZX`  | `MOVZX / N7` |
+| 24 | `11000` | `-8`| `Y`  | `y`     | `` ` ``  | `MOVB`   | `MOVB / N8` |
+| 25 | `11001` | `-9`| `Z`  | `z`     | `{`      | `—`      | `N9` |
+| 26 | `11010` | `^` | `␣`  | `@`     | `\|`     | `—`      | `POW` |
+| 27 | `11011` | `S` | `.`  | `-`     | `}`      | `—`      | `SCALE` |
+| 28 | `11100` | **RECORD** | **RECORD** | **RECORD** | **RECORD** | **RECORD** | `RECORD` |
+| 29 | `11101` | **CHECKSUM** | **CHECKSUM** | **CHECKSUM** | **CHECKSUM** | **CHECKSUM** | `CHECKSUM` |
+| 30 | `11110` | **END** | **END** | **END** | **END** | **END** | `END` |
+| 31 | `11111` | **START** | **START** | **START** | **START** | **START** | `START` |
+
+The 5basm name column is what you write in `.5ba` files. Where a token has
+multiple names (e.g., `LOOP / PLUS`), the meaning depends on context — the
+assembler accepts either name.
 
 ---
 
