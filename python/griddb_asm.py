@@ -131,7 +131,7 @@ class Assembler:
                 return [Token.START]*4 + [Token(6)] + [Token.END]*4 + list(Encoder.encode_integer(slot))
             # SPECIAL3 verb statements (STARTx4 cmd ENDx4 [arg])
             verb_map = {'store':12, 'read':13, 'call':7, 'if':9, 'loop':10, 'break':11,
-                        'loadx':18, 'storex':19, 'emit':14, 'ret':8}
+                        'loadx':18, 'storex':19, 'ret':8}
             if op in verb_map:
                 cmd = verb_map[op]
                 tokens = [Token.START]*4 + [Token(cmd)] + [Token.END]*4
@@ -145,6 +145,9 @@ class Assembler:
                 return [Token.RECORD]
             if op == 'checksum':
                 return [Token.CHECKSUM]
+            # Direct NUM token — any name in the lexicon table
+            if op.upper() in _RAW:
+                return [_RAW[op.upper()]]
             if op == 'raw':
                 toks: List[Token] = []
                 for name in rest.split():
