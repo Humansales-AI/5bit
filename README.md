@@ -111,6 +111,43 @@ The 5basm name column is what you write in `.5ba` files. Where a token has
 multiple names (e.g., `LOOP / PLUS`), the meaning depends on context — the
 assembler accepts either name.
 
+### 5basm — the .5ba file format
+
+The assembler reads `.5ba` text and produces `.5b` packed binary. Every
+name maps 1-to-1 with column 7 of the lexicon table above.
+
+**Verbs** (assembler auto-wraps with START×4 + END×4):
+
+| Write | Expands to |
+|---|---|
+| `def N` | `START×4 DEF(6) END×4` + encode_int(N) |
+| `call N` | `START×4 CALL(7) END×4` + encode_int(N) |
+| `ret` | `START×4 RET(8) END×4` |
+| `if` | `START×4 IF(9) END×4` |
+| `loop` | `START×4 LOOP(10) END×4` |
+| `break` | `START×4 BREAK(11) END×4` |
+| `store N` | `START×4 STORE(12) END×4` + encode_int(N) |
+| `read N` | `START×4 READ(13) END×4` + encode_int(N) |
+| `loadx` | `START×4 LOADX(18) END×4` |
+| `storex` | `START×4 STOREX(19) END×4` |
+
+**Direct tokens** (1-to-1, no wrapping):
+
+`D0`–`D9` `N1`–`N9` `PLUS` `MINUS` `MUL` `DIV` `EQ` `EMIT`
+`LPAREN` `RPAREN` `SYSCALL` `AND` `OR` `XOR` `SHL` `SHR`
+`NOT` `POPCNT` `MOVZX` `MOVB` `POW` `SCALE`
+`RECORD` `CHECKSUM` `END` `START`
+
+**Integer shorthand:**
+
+`int 42` → `D4 D2 END` (digit tokens + finalizer)
+
+**Structure:**
+
+`somelabel:` → label definition (for assembly)
+`; comment` → ignored
+`lparen` / `rparen` → `LPAREN(15)` / `RPAREN(16)`
+
 ---
 
 ## Context Switching — How It Works
